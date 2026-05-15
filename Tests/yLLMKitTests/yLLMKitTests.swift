@@ -296,6 +296,35 @@ final class yLLMKitTests: XCTestCase {
         }
     }
 
+    func testRuntimeDownloadAndInstallRegistersLocalModel() async throws {
+        let root = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let model = mockModel(id: "downloadable-model", backendID: "mock")
+        let registry = try ModelRegistry(models: [model])
+        let store = try FileModelStore(rootDirectory: root)
+        let runtime = try LLMRuntime(
+            modelRegistry: registry,
+            modelStore: store,
+            backends: [
+                MockBackend(
+                    models: [model],
+                    downloadDirectory: root.appendingPathComponent("downloadable-model")
+                )
+            ]
+        )
+
+        let stream = try await runtime.downloadAndInstallModel(id: "downloadable-model")
+        var phases: [ModelDownloadProgress.Phase] = []
+        for try await progress in stream {
+            phases.append(progress.phase)
+        }
+
+        let localModel = try await store.localModel(for: "downloadable-model")
+        XCTAssertEqual(phases, [.queued, .downloading, .complete])
+        XCTAssertEqual(localModel?.modelID, "downloadable-model")
+        XCTAssertTrue(try await store.isModelInstalled("downloadable-model"))
+    }
+
     private func temporaryDirectory() -> URL {
         FileManager.default.temporaryDirectory
             .appendingPathComponent("yLLMKitTests")
@@ -320,9 +349,11 @@ private actor MockBackend: LLMBackend {
     nonisolated let name = "Mock"
 
     private let models: [ModelDescriptor]
+    private let downloadDirectory: URL?
 
-    init(models: [ModelDescriptor]) {
+    init(models: [ModelDescriptor], downloadDirectory: URL? = nil) {
         self.models = models
+        self.downloadDirectory = downloadDirectory
     }
 
     func availableModels() async throws -> [ModelDescriptor] {
@@ -344,9 +375,44 @@ private actor MockBackend: LLMBackend {
             continuation.yield(
                 ModelDownloadProgress(
                     modelID: request.model.id,
+                    phase: .downloading,
+                    completedBytes: 1,
+                    totalBytes: 2
+                )
+            )
+
+            let localModel: LocalModel?
+            if let downloadDirectory {
+                do {
+                    try FileManager.default.createDirectory(
+                        at: downloadDirectory,
+                        withIntermediateDirectories: true
+                    )
+                    try Data("model".utf8).write(
+                        to: downloadDirectory.appendingPathComponent("weights.bin")
+                    )
+                    localModel = LocalModel(
+                        id: "local-\(request.model.id)",
+                        modelID: request.model.id,
+                        backendID: request.model.backendID,
+                        path: downloadDirectory.path,
+                        installedAt: Date(timeIntervalSince1970: 4)
+                    )
+                } catch {
+                    continuation.finish(throwing: error)
+                    return
+                }
+            } else {
+                localModel = nil
+            }
+
+            continuation.yield(
+                ModelDownloadProgress(
+                    modelID: request.model.id,
                     phase: .complete,
                     completedBytes: 1,
-                    totalBytes: 1
+                    totalBytes: 1,
+                    localModel: localModel
                 )
             )
             continuation.finish()

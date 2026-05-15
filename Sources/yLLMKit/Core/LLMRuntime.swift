@@ -42,6 +42,32 @@ public actor LLMRuntime {
         return backend.downloadModel(ModelDownloadRequest(model: model))
     }
 
+    public func downloadAndInstallModel(id modelID: String) async throws -> AsyncThrowingStream<ModelDownloadProgress, Error> {
+        let model = try await modelRegistry.model(id: modelID)
+        let backend = try backend(for: model)
+        let downloadStream = backend.downloadModel(ModelDownloadRequest(model: model))
+
+        return AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    for try await progress in downloadStream {
+                        if progress.phase == .complete, let localModel = progress.localModel {
+                            try await modelStore.register(localModel)
+                        }
+                        continuation.yield(progress)
+                    }
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+
+            continuation.onTermination = { @Sendable _ in
+                task.cancel()
+            }
+        }
+    }
+
     @discardableResult
     public func loadModel(id modelID: String) async throws -> LoadedModel {
         if let loadedModel = loadedModelsByID[modelID] {
