@@ -30,7 +30,7 @@ public struct MockLLMBackend: LLMBackend {
         []
     }
 
-    public func downloadModel(_ request: ModelDownloadRequest) -> AsyncThrowingStream<ModelDownloadProgress, Error> {
+    public func downloadModel(_ request: ModelDownloadRequest) async -> AsyncThrowingStream<ModelDownloadProgress, Error> {
         AsyncThrowingStream { continuation in
             continuation.yield(
                 ModelDownloadProgress(

@@ -4,7 +4,7 @@ public protocol LLMBackend: Sendable {
 
     func availableModels() async throws -> [ModelDescriptor]
     func localModels() async throws -> [LocalModel]
-    func downloadModel(_ request: ModelDownloadRequest) -> AsyncThrowingStream<ModelDownloadProgress, Error>
+    func downloadModel(_ request: ModelDownloadRequest) async -> AsyncThrowingStream<ModelDownloadProgress, Error>
     func loadModel(_ model: ModelDescriptor, from localModel: LocalModel?) async throws -> LoadedModel
     func unloadModel(_ modelID: String) async throws
     func createSession(

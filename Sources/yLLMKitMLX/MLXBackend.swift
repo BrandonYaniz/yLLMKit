@@ -1,0 +1,223 @@
+import Foundation
+import HuggingFace
+import MLXHuggingFace
+import MLXLLM
+import MLXLMCommon
+import Tokenizers
+import yLLMKit
+
+public actor MLXBackend: LLMBackend {
+    public nonisolated let id = "mlx"
+    public nonisolated let name = "MLX"
+
+    private let models: [ModelDescriptor]
+    private var containersByModelID: [String: ModelContainer]
+    private var localModelsByModelID: [String: LocalModel]
+
+    public init(models: [ModelDescriptor] = SupportedModelCatalog.all.filter { $0.backendID == "mlx" }) {
+        self.models = models
+        self.containersByModelID = [:]
+        self.localModelsByModelID = [:]
+    }
+
+    public func availableModels() async throws -> [ModelDescriptor] {
+        models
+    }
+
+    public func localModels() async throws -> [LocalModel] {
+        localModelsByModelID.values.sorted { $0.modelID < $1.modelID }
+    }
+
+    public func downloadModel(_ request: ModelDownloadRequest) async -> AsyncThrowingStream<ModelDownloadProgress, Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    continuation.yield(
+                        ModelDownloadProgress(
+                            modelID: request.model.id,
+                            phase: .queued
+                        )
+                    )
+
+                    let loaded = try await loadContainer(
+                        for: request.model,
+                        localModel: nil
+                    ) { progress in
+                        continuation.yield(
+                            ModelDownloadProgress(
+                                modelID: request.model.id,
+                                phase: .downloading,
+                                completedBytes: progress.completedUnitCount,
+                                totalBytes: progress.totalUnitCount > 0 ? progress.totalUnitCount : nil,
+                                message: progress.localizedDescription
+                            )
+                        )
+                    }
+
+                    containersByModelID[request.model.id] = loaded.container
+                    if let localModel = loaded.localModel {
+                        localModelsByModelID[request.model.id] = localModel
+                    }
+
+                    continuation.yield(
+                        ModelDownloadProgress(
+                            modelID: request.model.id,
+                            phase: .complete,
+                            completedBytes: loaded.completedBytes,
+                            totalBytes: loaded.completedBytes,
+                            localModel: loaded.localModel
+                        )
+                    )
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+
+            continuation.onTermination = { @Sendable _ in
+                task.cancel()
+            }
+        }
+    }
+
+    public func loadModel(_ model: ModelDescriptor, from localModel: LocalModel?) async throws -> LoadedModel {
+        if containersByModelID[model.id] == nil {
+            let loaded = try await loadContainer(for: model, localModel: localModel)
+            containersByModelID[model.id] = loaded.container
+            if let localModel = loaded.localModel {
+                localModelsByModelID[model.id] = localModel
+            }
+        }
+
+        return LoadedModel(
+            model: model,
+            localModel: localModel ?? localModelsByModelID[model.id]
+        )
+    }
+
+    public func unloadModel(_ modelID: String) async throws {
+        containersByModelID.removeValue(forKey: modelID)
+    }
+
+    public func createSession(
+        model: LoadedModel,
+        configuration: SessionConfiguration
+    ) async throws -> any LLMSession {
+        guard let container = containersByModelID[model.id] else {
+            throw LLMError.modelNotLoaded(model.id)
+        }
+
+        return MLXSession(
+            model: model.model,
+            container: container,
+            configuration: configuration
+        )
+    }
+
+    private func loadContainer(
+        for model: ModelDescriptor,
+        localModel: LocalModel?,
+        progressHandler: @Sendable @escaping (Progress) -> Void = { _ in }
+    ) async throws -> LoadedMLXContainer {
+        if let localModel {
+            let container = try await loadModelContainer(
+                from: URL(fileURLWithPath: localModel.path),
+                using: #huggingFaceTokenizerLoader()
+            )
+            return LoadedMLXContainer(
+                container: container,
+                localModel: localModel,
+                completedBytes: localModel.sizeBytes ?? 0
+            )
+        }
+
+        let recorder = DownloadRecorder()
+        let downloader = RecordingDownloader(
+            upstream: #hubDownloader(),
+            recorder: recorder
+        )
+        let container = try await loadModelContainer(
+            from: downloader,
+            using: #huggingFaceTokenizerLoader(),
+            configuration: MLXModelConfigurationFactory.configuration(for: model),
+            progressHandler: progressHandler
+        )
+        let localURL = await recorder.lastDownloadedURL()
+        let localModel = localURL.map { url in
+            LocalModel(
+                id: "local-\(model.id)",
+                modelID: model.id,
+                backendID: model.backendID,
+                path: url.path,
+                installedAt: Date()
+            )
+        }
+
+        return LoadedMLXContainer(
+            container: container,
+            localModel: localModel,
+            completedBytes: localURL.flatMap { directorySize(at: $0) } ?? 0
+        )
+    }
+
+    private nonisolated func directorySize(at url: URL) -> Int64? {
+        guard let enumerator = FileManager.default.enumerator(
+            at: url,
+            includingPropertiesForKeys: [.fileSizeKey, .isRegularFileKey]
+        ) else {
+            return nil
+        }
+
+        var total: Int64 = 0
+        for case let fileURL as URL in enumerator {
+            guard let values = try? fileURL.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey]),
+                  values.isRegularFile == true
+            else {
+                continue
+            }
+            total += Int64(values.fileSize ?? 0)
+        }
+        return total
+    }
+}
+
+private struct LoadedMLXContainer: Sendable {
+    var container: ModelContainer
+    var localModel: LocalModel?
+    var completedBytes: Int64
+}
+
+private actor DownloadRecorder {
+    private var url: URL?
+
+    func record(_ url: URL) {
+        self.url = url
+    }
+
+    func lastDownloadedURL() -> URL? {
+        url
+    }
+}
+
+private struct RecordingDownloader: Downloader {
+    var upstream: any Downloader
+    var recorder: DownloadRecorder
+
+    func download(
+        id: String,
+        revision: String?,
+        matching patterns: [String],
+        useLatest: Bool,
+        progressHandler: @Sendable @escaping (Progress) -> Void
+    ) async throws -> URL {
+        let url = try await upstream.download(
+            id: id,
+            revision: revision,
+            matching: patterns,
+            useLatest: useLatest,
+            progressHandler: progressHandler
+        )
+        await recorder.record(url)
+        return url
+    }
+}

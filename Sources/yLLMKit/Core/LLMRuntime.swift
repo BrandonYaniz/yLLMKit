@@ -39,13 +39,13 @@ public actor LLMRuntime {
     public func downloadModel(id modelID: String) async throws -> AsyncThrowingStream<ModelDownloadProgress, Error> {
         let model = try await modelRegistry.model(id: modelID)
         let backend = try backend(for: model)
-        return backend.downloadModel(ModelDownloadRequest(model: model))
+        return await backend.downloadModel(ModelDownloadRequest(model: model))
     }
 
     public func downloadAndInstallModel(id modelID: String) async throws -> AsyncThrowingStream<ModelDownloadProgress, Error> {
         let model = try await modelRegistry.model(id: modelID)
         let backend = try backend(for: model)
-        let downloadStream = backend.downloadModel(ModelDownloadRequest(model: model))
+        let downloadStream = await backend.downloadModel(ModelDownloadRequest(model: model))
 
         return AsyncThrowingStream { continuation in
             let task = Task {
