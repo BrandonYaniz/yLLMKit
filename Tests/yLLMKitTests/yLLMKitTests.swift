@@ -225,11 +225,178 @@ final class yLLMKitTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: modelDirectory.path))
     }
 
+    func testRuntimeLoadsModelAndStreamsTokens() async throws {
+        let model = mockModel(id: "chat-model", backendID: "mock")
+        let registry = try ModelRegistry(models: [model])
+        let store = try FileModelStore(rootDirectory: temporaryDirectory())
+        let runtime = try LLMRuntime(
+            modelRegistry: registry,
+            modelStore: store,
+            backends: [MockBackend(models: [model])]
+        )
+
+        let loadedModel = try await runtime.loadModel(id: "chat-model")
+        let session = try await runtime.createSession(
+            modelID: loadedModel.id,
+            configuration: SessionConfiguration(systemPrompt: nil)
+        )
+
+        var tokens: [LLMToken] = []
+        for try await token in session.streamResponse(
+            to: [LLMMessage(role: .user, content: "Hello")],
+            settings: .balanced
+        ) {
+            tokens.append(token)
+        }
+
+        XCTAssertEqual(loadedModel.model, model)
+        XCTAssertEqual(tokens.map(\.text), ["mock", " response"])
+    }
+
+    func testRuntimeRejectsMissingBackend() async throws {
+        let model = mockModel(id: "chat-model", backendID: "missing")
+        let registry = try ModelRegistry(models: [model])
+        let store = try FileModelStore(rootDirectory: temporaryDirectory())
+        let runtime = try LLMRuntime(
+            modelRegistry: registry,
+            modelStore: store,
+            backends: []
+        )
+
+        do {
+            _ = try await runtime.loadModel(id: "chat-model")
+            XCTFail("Expected missing backend to throw.")
+        } catch LLMError.backendUnavailable("missing") {
+            // Expected.
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
+    func testRuntimeRequiresLoadedModelBeforeSession() async throws {
+        let model = mockModel(id: "chat-model", backendID: "mock")
+        let registry = try ModelRegistry(models: [model])
+        let store = try FileModelStore(rootDirectory: temporaryDirectory())
+        let runtime = try LLMRuntime(
+            modelRegistry: registry,
+            modelStore: store,
+            backends: [MockBackend(models: [model])]
+        )
+
+        do {
+            _ = try await runtime.createSession(
+                modelID: "chat-model",
+                configuration: SessionConfiguration(systemPrompt: nil)
+            )
+            XCTFail("Expected unloaded model to throw.")
+        } catch LLMError.modelNotLoaded("chat-model") {
+            // Expected.
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
     private func temporaryDirectory() -> URL {
         FileManager.default.temporaryDirectory
             .appendingPathComponent("yLLMKitTests")
             .appendingPathComponent(UUID().uuidString)
     }
+
+    private func mockModel(id: String, backendID: String) -> ModelDescriptor {
+        ModelDescriptor(
+            id: id,
+            displayName: "Chat Model",
+            backendID: backendID,
+            provider: "local",
+            repository: "models/\(id)",
+            capabilities: .chatOnly(contextWindow: 4096),
+            defaultSettings: .balanced
+        )
+    }
+}
+
+private actor MockBackend: LLMBackend {
+    nonisolated let id = "mock"
+    nonisolated let name = "Mock"
+
+    private let models: [ModelDescriptor]
+
+    init(models: [ModelDescriptor]) {
+        self.models = models
+    }
+
+    func availableModels() async throws -> [ModelDescriptor] {
+        models
+    }
+
+    func localModels() async throws -> [LocalModel] {
+        []
+    }
+
+    func downloadModel(_ request: ModelDownloadRequest) -> AsyncThrowingStream<ModelDownloadProgress, Error> {
+        AsyncThrowingStream { continuation in
+            continuation.yield(
+                ModelDownloadProgress(
+                    modelID: request.model.id,
+                    phase: .queued
+                )
+            )
+            continuation.yield(
+                ModelDownloadProgress(
+                    modelID: request.model.id,
+                    phase: .complete,
+                    completedBytes: 1,
+                    totalBytes: 1
+                )
+            )
+            continuation.finish()
+        }
+    }
+
+    func loadModel(_ model: ModelDescriptor, from localModel: LocalModel?) async throws -> LoadedModel {
+        LoadedModel(model: model, localModel: localModel)
+    }
+
+    func unloadModel(_ modelID: String) async throws {}
+
+    func createSession(
+        model: LoadedModel,
+        configuration: SessionConfiguration
+    ) async throws -> any LLMSession {
+        MockSession(model: model.model)
+    }
+}
+
+private struct MockSession: LLMSession {
+    let id = UUID()
+    let model: ModelDescriptor
+
+    func respond(
+        to messages: [LLMMessage],
+        settings: GenerationSettings
+    ) async throws -> LLMResponse {
+        LLMResponse(
+            content: "mock response",
+            finishReason: .stop,
+            tokens: [
+                LLMToken(text: "mock", index: 0),
+                LLMToken(text: " response", index: 1)
+            ]
+        )
+    }
+
+    func streamResponse(
+        to messages: [LLMMessage],
+        settings: GenerationSettings
+    ) -> AsyncThrowingStream<LLMToken, Error> {
+        AsyncThrowingStream { continuation in
+            continuation.yield(LLMToken(text: "mock", index: 0))
+            continuation.yield(LLMToken(text: " response", index: 1))
+            continuation.finish()
+        }
+    }
+
+    func cancel() {}
 }
 #else
 import Foundation
