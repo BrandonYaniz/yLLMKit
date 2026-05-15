@@ -27,4 +27,20 @@ public struct ModelCapabilities: Codable, Sendable, Equatable {
         self.contextWindow = contextWindow
         self.preferredMaxOutputTokens = preferredMaxOutputTokens
     }
+
+    public static func chatOnly(
+        contextWindow: Int,
+        preferredMaxOutputTokens: Int? = nil
+    ) -> ModelCapabilities {
+        ModelCapabilities(
+            supportsChat: true,
+            supportsCompletion: false,
+            supportsVision: false,
+            supportsEmbeddings: false,
+            supportsToolCalling: false,
+            supportsJSONMode: false,
+            contextWindow: contextWindow,
+            preferredMaxOutputTokens: preferredMaxOutputTokens
+        )
+    }
 }

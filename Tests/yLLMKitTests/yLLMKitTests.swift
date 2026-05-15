@@ -4,6 +4,12 @@ import XCTest
 @testable import yLLMKit
 
 final class yLLMKitTests: XCTestCase {
+    private func sampleManifestData() throws -> Data {
+        let manifestURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("examples/sample-model-manifest.json")
+        return try Data(contentsOf: manifestURL)
+    }
+
     func testMessageInitialization() {
         let message = LLMMessage(
             role: .user,
@@ -40,10 +46,7 @@ final class yLLMKitTests: XCTestCase {
     }
 
     func testSampleModelManifestDecodes() throws {
-        let manifestURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-            .appendingPathComponent("examples/sample-model-manifest.json")
-        let data = try Data(contentsOf: manifestURL)
-
+        let data = try sampleManifestData()
         let manifest = try JSONDecoder().decode(ModelManifest.self, from: data)
 
         XCTAssertEqual(manifest.models.count, 1)
@@ -85,6 +88,69 @@ final class yLLMKitTests: XCTestCase {
         let decoded = try JSONDecoder().decode(ModelManifest.self, from: data)
 
         XCTAssertEqual(decoded, manifest)
+    }
+
+    func testModelRegistryLoadsManifestData() async throws {
+        let registry = try ModelRegistry(manifestData: sampleManifestData())
+
+        let supportedModels = await registry.supportedModels()
+        let model = try await registry.model(id: "fast-local-assistant")
+
+        XCTAssertEqual(supportedModels, [model])
+        XCTAssertEqual(model.backendID, "mlx")
+    }
+
+    func testModelRegistryFiltersByBackend() async throws {
+        let mlxModel = ModelDescriptor(
+            id: "mlx-model",
+            displayName: "MLX Model",
+            backendID: "mlx",
+            provider: "local",
+            repository: "models/mlx",
+            capabilities: .chatOnly(contextWindow: 4096),
+            defaultSettings: .balanced
+        )
+        let mockModel = ModelDescriptor(
+            id: "mock-model",
+            displayName: "Mock Model",
+            backendID: "mock",
+            provider: "local",
+            repository: "models/mock",
+            capabilities: .chatOnly(contextWindow: 4096),
+            defaultSettings: .balanced
+        )
+        let registry = try ModelRegistry(models: [mockModel, mlxModel])
+
+        let mlxModels = await registry.models(forBackend: "mlx")
+
+        XCTAssertEqual(mlxModels, [mlxModel])
+    }
+
+    func testModelRegistryThrowsForMissingModel() async throws {
+        let registry = try ModelRegistry(models: [])
+
+        do {
+            _ = try await registry.model(id: "missing")
+            XCTFail("Expected missing model lookup to throw.")
+        } catch LLMError.modelNotFound("missing") {
+            // Expected.
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
+    func testModelRegistryRejectsDuplicateIDs() {
+        let model = ModelDescriptor(
+            id: "duplicate",
+            displayName: "Duplicate",
+            backendID: "mock",
+            provider: "local",
+            repository: "models/duplicate",
+            capabilities: .chatOnly(contextWindow: 4096),
+            defaultSettings: .balanced
+        )
+
+        XCTAssertThrowsError(try ModelRegistry(models: [model, model]))
     }
 }
 #else
