@@ -152,6 +152,84 @@ final class yLLMKitTests: XCTestCase {
 
         XCTAssertThrowsError(try ModelRegistry(models: [model, model]))
     }
+
+    func testFileModelStoreRegistersAndFindsLocalModel() async throws {
+        let root = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let modelDirectory = root.appendingPathComponent("fast-local-assistant")
+        try FileManager.default.createDirectory(at: modelDirectory, withIntermediateDirectories: true)
+        try Data("model".utf8).write(to: modelDirectory.appendingPathComponent("weights.bin"))
+
+        let store = try FileModelStore(rootDirectory: root)
+        let localModel = LocalModel(
+            id: "local-fast-local-assistant",
+            modelID: "fast-local-assistant",
+            backendID: "mlx",
+            path: modelDirectory.path,
+            installedAt: Date(timeIntervalSince1970: 1)
+        )
+
+        try await store.register(localModel)
+
+        let storedModel = try await store.localModel(for: "fast-local-assistant")
+        XCTAssertEqual(storedModel?.modelID, "fast-local-assistant")
+        XCTAssertEqual(storedModel?.sizeBytes, 5)
+        XCTAssertTrue(try await store.isModelInstalled("fast-local-assistant"))
+    }
+
+    func testFileModelStorePersistsIndex() async throws {
+        let root = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let modelDirectory = root.appendingPathComponent("mock-model")
+        try FileManager.default.createDirectory(at: modelDirectory, withIntermediateDirectories: true)
+
+        let firstStore = try FileModelStore(rootDirectory: root)
+        try await firstStore.register(
+            LocalModel(
+                id: "local-mock-model",
+                modelID: "mock-model",
+                backendID: "mock",
+                path: modelDirectory.path,
+                installedAt: Date(timeIntervalSince1970: 2),
+                sizeBytes: 10
+            )
+        )
+
+        let secondStore = try FileModelStore(rootDirectory: root)
+        let localModels = try await secondStore.localModels()
+
+        XCTAssertEqual(localModels.map(\.modelID), ["mock-model"])
+        XCTAssertEqual(localModels.first?.sizeBytes, 10)
+    }
+
+    func testFileModelStoreRemovesLocalModel() async throws {
+        let root = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let modelDirectory = root.appendingPathComponent("remove-me")
+        try FileManager.default.createDirectory(at: modelDirectory, withIntermediateDirectories: true)
+
+        let store = try FileModelStore(rootDirectory: root)
+        try await store.register(
+            LocalModel(
+                id: "local-remove-me",
+                modelID: "remove-me",
+                backendID: "mock",
+                path: modelDirectory.path,
+                installedAt: Date(timeIntervalSince1970: 3)
+            )
+        )
+
+        try await store.removeModel(id: "remove-me")
+
+        XCTAssertNil(try await store.localModel(for: "remove-me"))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: modelDirectory.path))
+    }
+
+    private func temporaryDirectory() -> URL {
+        FileManager.default.temporaryDirectory
+            .appendingPathComponent("yLLMKitTests")
+            .appendingPathComponent(UUID().uuidString)
+    }
 }
 #else
 import Foundation
