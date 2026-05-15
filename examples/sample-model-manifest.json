@@ -1,0 +1,26 @@
+{
+  "id": "fast-local-assistant",
+  "displayName": "Fast Local Assistant",
+  "backendID": "mlx",
+  "provider": "huggingface",
+  "repository": "mlx-community/gemma-3-1b-it-qat-4bit",
+  "revision": null,
+  "recommendedRAMGB": 8,
+  "capabilities": {
+    "supportsChat": true,
+    "supportsCompletion": false,
+    "supportsVision": false,
+    "supportsEmbeddings": false,
+    "supportsToolCalling": false,
+    "supportsJSONMode": false,
+    "contextWindow": 32768,
+    "preferredMaxOutputTokens": 4096
+  },
+  "defaultSettings": {
+    "temperature": 0.7,
+    "topP": 0.9,
+    "maxTokens": 2048,
+    "repetitionPenalty": null,
+    "stopSequences": []
+  }
+}
