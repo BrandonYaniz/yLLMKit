@@ -90,6 +90,30 @@ final class yLLMKitTests: XCTestCase {
         XCTAssertEqual(decoded, manifest)
     }
 
+    func testSupportedModelCatalogIncludesPhiModels() throws {
+        let registry = try ModelRegistry(models: SupportedModelCatalog.all)
+
+        let phiModels = await registry.models(forBackend: "mlx")
+            .filter { $0.id.hasPrefix("phi-") }
+
+        XCTAssertEqual(
+            phiModels.map(\.id),
+            [
+                "phi-2",
+                "phi-3.5-mini",
+                "phi-3.5-moe",
+            ]
+        )
+        XCTAssertEqual(
+            try await registry.model(id: "phi-3.5-mini").repository,
+            "mlx-community/Phi-3.5-mini-instruct-4bit"
+        )
+        XCTAssertEqual(
+            try await registry.model(id: "phi-3.5-moe").defaultSettings.stopSequences,
+            ["<|end|>"]
+        )
+    }
+
     func testModelRegistryLoadsManifestData() async throws {
         let registry = try ModelRegistry(manifestData: sampleManifestData())
 
