@@ -232,7 +232,7 @@ final class yLLMKitTests: XCTestCase {
         let runtime = try LLMRuntime(
             modelRegistry: registry,
             modelStore: store,
-            backends: [MockBackend(models: [model])]
+            backends: [MockLLMBackend(models: [model])]
         )
 
         let loadedModel = try await runtime.loadModel(id: "chat-model")
@@ -280,7 +280,7 @@ final class yLLMKitTests: XCTestCase {
         let runtime = try LLMRuntime(
             modelRegistry: registry,
             modelStore: store,
-            backends: [MockBackend(models: [model])]
+            backends: [MockLLMBackend(models: [model])]
         )
 
         do {
@@ -306,9 +306,9 @@ final class yLLMKitTests: XCTestCase {
             modelRegistry: registry,
             modelStore: store,
             backends: [
-                MockBackend(
+                MockLLMBackend(
                     models: [model],
-                    downloadDirectory: root.appendingPathComponent("downloadable-model")
+                    downloadRoot: root.appendingPathComponent("downloads")
                 )
             ]
         )
@@ -342,127 +342,6 @@ final class yLLMKitTests: XCTestCase {
             defaultSettings: .balanced
         )
     }
-}
-
-private actor MockBackend: LLMBackend {
-    nonisolated let id = "mock"
-    nonisolated let name = "Mock"
-
-    private let models: [ModelDescriptor]
-    private let downloadDirectory: URL?
-
-    init(models: [ModelDescriptor], downloadDirectory: URL? = nil) {
-        self.models = models
-        self.downloadDirectory = downloadDirectory
-    }
-
-    func availableModels() async throws -> [ModelDescriptor] {
-        models
-    }
-
-    func localModels() async throws -> [LocalModel] {
-        []
-    }
-
-    func downloadModel(_ request: ModelDownloadRequest) -> AsyncThrowingStream<ModelDownloadProgress, Error> {
-        AsyncThrowingStream { continuation in
-            continuation.yield(
-                ModelDownloadProgress(
-                    modelID: request.model.id,
-                    phase: .queued
-                )
-            )
-            continuation.yield(
-                ModelDownloadProgress(
-                    modelID: request.model.id,
-                    phase: .downloading,
-                    completedBytes: 1,
-                    totalBytes: 2
-                )
-            )
-
-            let localModel: LocalModel?
-            if let downloadDirectory {
-                do {
-                    try FileManager.default.createDirectory(
-                        at: downloadDirectory,
-                        withIntermediateDirectories: true
-                    )
-                    try Data("model".utf8).write(
-                        to: downloadDirectory.appendingPathComponent("weights.bin")
-                    )
-                    localModel = LocalModel(
-                        id: "local-\(request.model.id)",
-                        modelID: request.model.id,
-                        backendID: request.model.backendID,
-                        path: downloadDirectory.path,
-                        installedAt: Date(timeIntervalSince1970: 4)
-                    )
-                } catch {
-                    continuation.finish(throwing: error)
-                    return
-                }
-            } else {
-                localModel = nil
-            }
-
-            continuation.yield(
-                ModelDownloadProgress(
-                    modelID: request.model.id,
-                    phase: .complete,
-                    completedBytes: 1,
-                    totalBytes: 1,
-                    localModel: localModel
-                )
-            )
-            continuation.finish()
-        }
-    }
-
-    func loadModel(_ model: ModelDescriptor, from localModel: LocalModel?) async throws -> LoadedModel {
-        LoadedModel(model: model, localModel: localModel)
-    }
-
-    func unloadModel(_ modelID: String) async throws {}
-
-    func createSession(
-        model: LoadedModel,
-        configuration: SessionConfiguration
-    ) async throws -> any LLMSession {
-        MockSession(model: model.model)
-    }
-}
-
-private struct MockSession: LLMSession {
-    let id = UUID()
-    let model: ModelDescriptor
-
-    func respond(
-        to messages: [LLMMessage],
-        settings: GenerationSettings
-    ) async throws -> LLMResponse {
-        LLMResponse(
-            content: "mock response",
-            finishReason: .stop,
-            tokens: [
-                LLMToken(text: "mock", index: 0),
-                LLMToken(text: " response", index: 1)
-            ]
-        )
-    }
-
-    func streamResponse(
-        to messages: [LLMMessage],
-        settings: GenerationSettings
-    ) -> AsyncThrowingStream<LLMToken, Error> {
-        AsyncThrowingStream { continuation in
-            continuation.yield(LLMToken(text: "mock", index: 0))
-            continuation.yield(LLMToken(text: " response", index: 1))
-            continuation.finish()
-        }
-    }
-
-    func cancel() {}
 }
 #else
 import Foundation
