@@ -8,7 +8,7 @@ The goal is to make common local LLM tasks straightforward: discover supported m
 
 This project is in early development. The package now includes runtime-neutral core types, model manifests, a model registry, a file-backed local model store, backend/session protocols, runtime routing, download/install progress handling, streaming response aggregation, and a mock backend for integration testing.
 
-The next major implementation step is a real MLX backend for Apple Silicon Macs.
+The MLX backend is available as a separate `yLLMKitMLX` product so apps that only need the core interfaces do not need to link MLX.
 
 ## Requirements
 
@@ -35,6 +35,18 @@ Then add the library product to your target:
     name: "YourApp",
     dependencies: [
         .product(name: "yLLMKit", package: "yLLMKit")
+    ]
+)
+```
+
+To use local MLX inference, add the MLX product as well:
+
+```swift
+.target(
+    name: "YourApp",
+    dependencies: [
+        .product(name: "yLLMKit", package: "yLLMKit"),
+        .product(name: "yLLMKitMLX", package: "yLLMKit")
     ]
 )
 ```
@@ -130,6 +142,23 @@ for try await token in session.streamResponse(
 
 The mock backend is useful for validating app integration. Real local inference will come from backend implementations such as MLX.
 
+For MLX inference, import the MLX product and use the shared supported catalog:
+
+```swift
+import yLLMKit
+import yLLMKitMLX
+
+let registry = try ModelRegistry(models: SupportedModelCatalog.all)
+let store = try FileModelStore(rootDirectory: modelStoreURL)
+let runtime = try LLMRuntime(
+    modelRegistry: registry,
+    modelStore: store,
+    backends: [MLXBackend()]
+)
+
+try await runtime.loadModel(id: "phi-3.5-mini")
+```
+
 ## Model Workflow
 
 The planned model workflow is:
@@ -144,6 +173,15 @@ The planned model workflow is:
 8. Cancel generation cleanly when the user stops or changes a request.
 
 Model IDs should come from manifests so app code does not need to hardcode provider-specific repository names.
+
+## Supported Models
+
+The built-in catalog currently declares these MLX-backed chat models:
+
+- `fast-local-assistant`: `mlx-community/gemma-3-1b-it-qat-4bit`
+- `phi-2`: `mlx-community/phi-2-hf-4bit-mlx`
+- `phi-3.5-mini`: `mlx-community/Phi-3.5-mini-instruct-4bit`
+- `phi-3.5-moe`: `mlx-community/Phi-3.5-MoE-instruct-4bit`
 
 ## Context
 
