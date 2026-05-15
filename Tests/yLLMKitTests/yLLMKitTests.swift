@@ -325,6 +325,19 @@ final class yLLMKitTests: XCTestCase {
         XCTAssertTrue(try await store.isModelInstalled("downloadable-model"))
     }
 
+    func testSessionDefaultResponseAggregatesStreamedTokens() async throws {
+        let session = StreamOnlySession(model: mockModel(id: "stream-model", backendID: "mock"))
+
+        let response = try await session.respond(
+            to: [LLMMessage(role: .user, content: "Hello")],
+            settings: .balanced
+        )
+
+        XCTAssertEqual(response.content, "streamed response")
+        XCTAssertEqual(response.finishReason, .stop)
+        XCTAssertEqual(response.tokens.map(\.text), ["streamed", " response"])
+    }
+
     private func temporaryDirectory() -> URL {
         FileManager.default.temporaryDirectory
             .appendingPathComponent("yLLMKitTests")
@@ -342,6 +355,24 @@ final class yLLMKitTests: XCTestCase {
             defaultSettings: .balanced
         )
     }
+}
+
+private struct StreamOnlySession: LLMSession {
+    let id = UUID()
+    let model: ModelDescriptor
+
+    func streamResponse(
+        to messages: [LLMMessage],
+        settings: GenerationSettings
+    ) -> AsyncThrowingStream<LLMToken, Error> {
+        AsyncThrowingStream { continuation in
+            continuation.yield(LLMToken(text: "streamed", index: 0))
+            continuation.yield(LLMToken(text: " response", index: 1))
+            continuation.finish()
+        }
+    }
+
+    func cancel() {}
 }
 #else
 import Foundation
