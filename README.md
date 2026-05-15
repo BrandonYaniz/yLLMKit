@@ -6,7 +6,9 @@ The goal is to make common local LLM tasks straightforward: discover supported m
 
 ## Status
 
-This project is in early development. The package currently contains the first public runtime-neutral types and will expand toward model manifests, model download/load support, streaming generation, cancellation, metrics, and an MLX backend for Apple Silicon Macs.
+This project is in early development. The package now includes runtime-neutral core types, model manifests, a model registry, a file-backed local model store, backend/session protocols, runtime routing, download/install progress handling, streaming response aggregation, and a mock backend for integration testing.
+
+The next major implementation step is a real MLX backend for Apple Silicon Macs.
 
 ## Requirements
 
@@ -82,13 +84,36 @@ let configuration = SessionConfiguration(
 )
 ```
 
-The runtime and backend APIs are still being implemented. The intended usage shape is:
+Create a model descriptor or load one from a manifest, then build a registry and local model store:
 
 ```swift
-let runtime = LLMRuntime(backends: [MLXBackend()])
+let model = ModelDescriptor(
+    id: "fast-local-assistant",
+    displayName: "Fast Local Assistant",
+    backendID: "mock",
+    provider: "local",
+    repository: "models/fast-local-assistant",
+    capabilities: .chatOnly(contextWindow: 4096),
+    defaultSettings: .balanced
+)
 
-let model = try await runtime.modelRegistry.model(id: "fast-local-assistant")
-try await runtime.loadModel(model)
+let registry = try ModelRegistry(models: [model])
+let store = try FileModelStore(
+    rootDirectory: FileManager.default.urls(
+        for: .applicationSupportDirectory,
+        in: .userDomainMask
+    )[0].appendingPathComponent("yLLMKit")
+)
+
+let runtime = try LLMRuntime(
+    modelRegistry: registry,
+    modelStore: store,
+    backends: [
+        MockLLMBackend(models: [model])
+    ]
+)
+
+try await runtime.loadModel(id: model.id)
 
 let session = try await runtime.createSession(
     modelID: model.id,
@@ -103,17 +128,20 @@ for try await token in session.streamResponse(
 }
 ```
 
+The mock backend is useful for validating app integration. Real local inference will come from backend implementations such as MLX.
+
 ## Model Workflow
 
 The planned model workflow is:
 
-1. Read the supported model manifest.
-2. Show supported models in your app.
-3. Check which supported models are already installed locally.
-4. Download a selected model if needed.
-5. Load the model once and keep it warm while the user is actively querying it.
-6. Stream generated tokens into your app.
-7. Cancel generation cleanly when the user stops or changes a request.
+1. Read a supported model manifest into `ModelRegistry`.
+2. Show supported models from `runtime.supportedModels()`.
+3. Check local install state with `runtime.isModelInstalled(_:)`.
+4. Download and register a selected model with `runtime.downloadAndInstallModel(id:)`.
+5. Load the model once with `runtime.loadModel(id:)`.
+6. Create a session with `runtime.createSession(modelID:configuration:)`.
+7. Stream generated tokens with `session.streamResponse(to:settings:)`.
+8. Cancel generation cleanly when the user stops or changes a request.
 
 Model IDs should come from manifests so app code does not need to hardcode provider-specific repository names.
 
