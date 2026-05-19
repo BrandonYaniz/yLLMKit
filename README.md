@@ -206,4 +206,16 @@ swift build
 swift test
 ```
 
+To run a live MLX download/inference smoke test, opt in explicitly:
+
+```sh
+YLLMKIT_RUN_MLX_SMOKE=1 swift test
+```
+
+The smoke test defaults to `phi-2`. To use another supported model:
+
+```sh
+YLLMKIT_RUN_MLX_SMOKE=1 YLLMKIT_MLX_SMOKE_MODEL=fast-local-assistant swift test
+```
+
 Development notes used by local tooling are kept outside the public documentation path and are ignored by git.
