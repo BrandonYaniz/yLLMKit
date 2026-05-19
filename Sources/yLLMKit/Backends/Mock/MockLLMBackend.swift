@@ -122,7 +122,8 @@ public struct MockLLMSession: LLMSession {
         to messages: [LLMMessage],
         settings: GenerationSettings
     ) async throws -> LLMResponse {
-        let tokens = responseText.split(separator: " ", omittingEmptySubsequences: false)
+        let text = responseText.truncated(atFirst: settings.stopSequences)
+        let tokens = text.split(separator: " ", omittingEmptySubsequences: false)
             .enumerated()
             .map { index, chunk in
                 LLMToken(
@@ -132,7 +133,7 @@ public struct MockLLMSession: LLMSession {
             }
 
         return LLMResponse(
-            content: responseText,
+            content: text,
             finishReason: .stop,
             tokens: tokens
         )
@@ -143,7 +144,7 @@ public struct MockLLMSession: LLMSession {
         settings: GenerationSettings
     ) -> AsyncThrowingStream<LLMToken, Error> {
         AsyncThrowingStream { continuation in
-            for token in responseTokens() {
+            for token in responseTokens(settings: settings) {
                 continuation.yield(token)
             }
             continuation.finish()
@@ -152,8 +153,9 @@ public struct MockLLMSession: LLMSession {
 
     public func cancel() {}
 
-    private func responseTokens() -> [LLMToken] {
-        responseText.split(separator: " ", omittingEmptySubsequences: false)
+    private func responseTokens(settings: GenerationSettings) -> [LLMToken] {
+        responseText.truncated(atFirst: settings.stopSequences)
+            .split(separator: " ", omittingEmptySubsequences: false)
             .enumerated()
             .map { index, chunk in
                 LLMToken(
@@ -161,5 +163,18 @@ public struct MockLLMSession: LLMSession {
                     index: index
                 )
             }
+    }
+}
+
+private extension String {
+    func truncated(atFirst stopSequences: [String]) -> String {
+        let stopRanges = stopSequences
+            .filter { !$0.isEmpty }
+            .compactMap { range(of: $0) }
+
+        guard let firstStop = stopRanges.min(by: { $0.lowerBound < $1.lowerBound }) else {
+            return self
+        }
+        return String(self[..<firstStop.lowerBound])
     }
 }

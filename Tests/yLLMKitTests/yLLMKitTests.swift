@@ -337,6 +337,46 @@ final class yLLMKitTests: XCTestCase {
         XCTAssertEqual(tokens.map(\.text), ["mock", " response"])
     }
 
+    func testMockSessionHonorsStopSequences() async throws {
+        let session = MockLLMSession(
+            model: mockModel(id: "stop-model", backendID: "mock"),
+            responseText: "first STOP second"
+        )
+
+        let response = try await session.respond(
+            to: [LLMMessage(role: .user, content: "Hello")],
+            settings: GenerationSettings(
+                temperature: 0.0,
+                topP: 1.0,
+                stopSequences: ["STOP"]
+            )
+        )
+
+        XCTAssertEqual(response.content, "first ")
+        XCTAssertEqual(response.tokens.map(\.text), ["first", " "])
+    }
+
+    func testMockStreamHonorsStopSequences() async throws {
+        let session = MockLLMSession(
+            model: mockModel(id: "stop-model", backendID: "mock"),
+            responseText: "first STOP second"
+        )
+
+        var output = ""
+        for try await token in session.streamResponse(
+            to: [LLMMessage(role: .user, content: "Hello")],
+            settings: GenerationSettings(
+                temperature: 0.0,
+                topP: 1.0,
+                stopSequences: ["STOP"]
+            )
+        ) {
+            output += token.text
+        }
+
+        XCTAssertEqual(output, "first ")
+    }
+
     func testRuntimeRejectsUninstalledModelLoad() async throws {
         let model = mockModel(id: "chat-model", backendID: "mock")
         let registry = try ModelRegistry(models: [model])

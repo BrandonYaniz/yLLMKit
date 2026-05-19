@@ -32,6 +32,9 @@ public final class MLXSession: LLMSession, @unchecked Sendable {
                 do {
                     var index = 0
                     let request = try MLXPromptBuilder.promptRequest(from: messages)
+                    var stopFilter = StopSequenceFilter(
+                        stopSequences: stopSequences(from: settings)
+                    )
                     let session = ChatSession(
                         container,
                         instructions: combinedInstructions(request.instructions),
@@ -50,13 +53,28 @@ public final class MLXSession: LLMSession, @unchecked Sendable {
                             return
                         }
 
+                        let result = stopFilter.append(chunk)
+                        if let text = result.text, !text.isEmpty {
+                            continuation.yield(
+                                LLMToken(
+                                    text: text,
+                                    index: index
+                                )
+                            )
+                            index += 1
+                        }
+                        if result.shouldStop {
+                            continuation.finish()
+                            return
+                        }
+                    }
+                    if let text = stopFilter.finish(), !text.isEmpty {
                         continuation.yield(
                             LLMToken(
-                                text: chunk,
+                                text: text,
                                 index: index
                             )
                         )
-                        index += 1
                     }
                     continuation.finish()
                 } catch {
@@ -83,11 +101,63 @@ public final class MLXSession: LLMSession, @unchecked Sendable {
             .joined(separator: "\n\n")
             .nilIfEmpty
     }
+
+    private func stopSequences(from settings: GenerationSettings) -> [String] {
+        var seen = Set<String>()
+        return (model.defaultSettings.stopSequences + settings.stopSequences)
+            .filter { sequence in
+                !sequence.isEmpty && seen.insert(sequence).inserted
+            }
+    }
 }
 
 private extension String {
     var nilIfEmpty: String? {
         isEmpty ? nil : self
+    }
+}
+
+private struct StopSequenceFilter {
+    private let stopSequences: [String]
+    private let retainedSuffixLength: Int
+    private var buffer = ""
+
+    init(stopSequences: [String]) {
+        self.stopSequences = stopSequences
+        self.retainedSuffixLength = max(0, (stopSequences.map(\.count).max() ?? 1) - 1)
+    }
+
+    mutating func append(_ text: String) -> (text: String?, shouldStop: Bool) {
+        guard !stopSequences.isEmpty else {
+            return (text, false)
+        }
+
+        buffer += text
+        if let stopRange = earliestStopRange(in: buffer) {
+            let output = String(buffer[..<stopRange.lowerBound])
+            buffer.removeAll(keepingCapacity: false)
+            return (output, true)
+        }
+
+        guard buffer.count > retainedSuffixLength else {
+            return (nil, false)
+        }
+
+        let splitIndex = buffer.index(buffer.endIndex, offsetBy: -retainedSuffixLength)
+        let output = String(buffer[..<splitIndex])
+        buffer = String(buffer[splitIndex...])
+        return (output, false)
+    }
+
+    mutating func finish() -> String? {
+        defer { buffer.removeAll(keepingCapacity: false) }
+        return buffer.isEmpty ? nil : buffer
+    }
+
+    private func earliestStopRange(in text: String) -> Range<String.Index>? {
+        stopSequences
+            .compactMap { text.range(of: $0) }
+            .min { $0.lowerBound < $1.lowerBound }
     }
 }
 
