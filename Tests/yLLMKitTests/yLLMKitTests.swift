@@ -250,7 +250,10 @@ final class yLLMKitTests: XCTestCase {
     func testRuntimeLoadsModelAndStreamsTokens() async throws {
         let model = mockModel(id: "chat-model", backendID: "mock")
         let registry = try ModelRegistry(models: [model])
-        let store = try FileModelStore(rootDirectory: temporaryDirectory())
+        let root = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = try FileModelStore(rootDirectory: root)
+        try await registerInstalledMockModel(model, in: store, root: root)
         let runtime = try LLMRuntime(
             modelRegistry: registry,
             modelStore: store,
@@ -275,6 +278,28 @@ final class yLLMKitTests: XCTestCase {
         XCTAssertEqual(tokens.map(\.text), ["mock", " response"])
     }
 
+    func testRuntimeRejectsUninstalledModelLoad() async throws {
+        let model = mockModel(id: "chat-model", backendID: "mock")
+        let registry = try ModelRegistry(models: [model])
+        let root = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = try FileModelStore(rootDirectory: root)
+        let runtime = try LLMRuntime(
+            modelRegistry: registry,
+            modelStore: store,
+            backends: [MockLLMBackend(models: [model])]
+        )
+
+        do {
+            _ = try await runtime.loadModel(id: "chat-model")
+            XCTFail("Expected uninstalled model to throw.")
+        } catch LLMError.modelNotInstalled("chat-model") {
+            // Expected.
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
     func testRuntimeRejectsMissingBackend() async throws {
         let model = mockModel(id: "chat-model", backendID: "missing")
         let registry = try ModelRegistry(models: [model])
@@ -289,6 +314,35 @@ final class yLLMKitTests: XCTestCase {
             _ = try await runtime.loadModel(id: "chat-model")
             XCTFail("Expected missing backend to throw.")
         } catch LLMError.backendUnavailable("missing") {
+            // Expected.
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
+    func testRuntimeRemovesInstalledModel() async throws {
+        let root = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let model = mockModel(id: "removable-model", backendID: "mock")
+        let registry = try ModelRegistry(models: [model])
+        let store = try FileModelStore(rootDirectory: root)
+        try await registerInstalledMockModel(model, in: store, root: root)
+        let runtime = try LLMRuntime(
+            modelRegistry: registry,
+            modelStore: store,
+            backends: [MockLLMBackend(models: [model])]
+        )
+
+        try await runtime.loadModel(id: model.id)
+        try await runtime.removeModel(id: model.id)
+
+        let isInstalled = await store.isModelInstalled(model.id)
+        XCTAssertFalse(isInstalled)
+
+        do {
+            _ = try await runtime.loadedModel(id: model.id)
+            XCTFail("Expected removed model to be unloaded.")
+        } catch LLMError.modelNotLoaded(let modelID) where modelID == model.id {
             // Expected.
         } catch {
             XCTFail("Unexpected error: \(error)")
@@ -376,6 +430,25 @@ final class yLLMKitTests: XCTestCase {
             repository: "models/\(id)",
             capabilities: .chatOnly(contextWindow: 4096),
             defaultSettings: .balanced
+        )
+    }
+
+    private func registerInstalledMockModel(
+        _ model: ModelDescriptor,
+        in store: FileModelStore,
+        root: URL
+    ) async throws {
+        let modelDirectory = root.appendingPathComponent(model.id)
+        try FileManager.default.createDirectory(at: modelDirectory, withIntermediateDirectories: true)
+        try Data("mock model".utf8).write(to: modelDirectory.appendingPathComponent("weights.bin"))
+        try await store.register(
+            LocalModel(
+                id: "local-\(model.id)",
+                modelID: model.id,
+                backendID: model.backendID,
+                path: modelDirectory.path,
+                installedAt: Date(timeIntervalSince1970: 4)
+            )
         )
     }
 }

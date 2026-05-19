@@ -77,6 +77,10 @@ public actor LLMRuntime {
         let model = try await modelRegistry.model(id: modelID)
         let backend = try backend(for: model)
         let localModel = try await modelStore.localModel(for: modelID)
+        guard let localModel, try await modelStore.isModelInstalled(modelID) else {
+            throw LLMError.modelNotInstalled(modelID)
+        }
+
         let loadedModel = try await backend.loadModel(model, from: localModel)
         loadedModelsByID[modelID] = loadedModel
         return loadedModel
@@ -87,6 +91,13 @@ public actor LLMRuntime {
         let backend = try backend(for: model)
         try await backend.unloadModel(modelID)
         loadedModelsByID.removeValue(forKey: modelID)
+    }
+
+    public func removeModel(id modelID: String) async throws {
+        if loadedModelsByID[modelID] != nil {
+            try await unloadModel(id: modelID)
+        }
+        try await modelStore.removeModel(id: modelID)
     }
 
     public func createSession(

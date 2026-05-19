@@ -168,10 +168,11 @@ The planned model workflow is:
 2. Show supported models from `runtime.supportedModels()`.
 3. Check local install state with `runtime.isModelInstalled(_:)`.
 4. Download and register a selected model with `runtime.downloadAndInstallModel(id:)`.
-5. Load the model once with `runtime.loadModel(id:)`.
+5. Load an installed model once with `runtime.loadModel(id:)`.
 6. Create a session with `runtime.createSession(modelID:configuration:)`.
 7. Stream generated tokens with `session.streamResponse(to:settings:)`.
-8. Cancel generation cleanly when the user stops or changes a request.
+8. Remove models through `runtime.removeModel(id:)` when the user uninstalls them.
+9. Cancel generation cleanly when the user stops or changes a request.
 
 Model IDs should come from manifests so app code does not need to hardcode provider-specific repository names.
 
