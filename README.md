@@ -150,7 +150,10 @@ import yLLMKit
 import yLLMKitMLX
 
 let registry = try ModelRegistry(models: SupportedModelCatalog.all)
-let store = try FileModelStore(rootDirectory: modelStoreURL)
+let store = try FileModelStore(
+    rootDirectory: modelStoreURL,
+    removalPolicy: .registeredPaths
+)
 let runtime = try LLMRuntime(
     modelRegistry: registry,
     modelStore: store,
@@ -175,6 +178,8 @@ The planned model workflow is:
 9. Cancel generation cleanly when the user stops or changes a request.
 
 Model IDs should come from manifests so app code does not need to hardcode provider-specific repository names.
+
+`FileModelStore` removes files under its own root by default. Use `removalPolicy: .registeredPaths` when you want `runtime.removeModel(id:)` to also delete backend-managed model directories registered outside the store root, such as Hugging Face cache snapshots used by MLX.
 
 ## Supported Models
 

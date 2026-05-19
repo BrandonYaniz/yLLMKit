@@ -1,7 +1,13 @@
 import Foundation
 
+public enum FileModelRemovalPolicy: Sendable {
+    case storeRootOnly
+    case registeredPaths
+}
+
 public actor FileModelStore: ModelStore {
     public let rootDirectory: URL
+    public let removalPolicy: FileModelRemovalPolicy
 
     private let indexURL: URL
     private let fileManager: FileManager
@@ -9,9 +15,11 @@ public actor FileModelStore: ModelStore {
 
     public init(
         rootDirectory: URL,
+        removalPolicy: FileModelRemovalPolicy = .storeRootOnly,
         fileManager: FileManager = .default
     ) throws {
         self.rootDirectory = rootDirectory
+        self.removalPolicy = removalPolicy
         self.indexURL = rootDirectory.appendingPathComponent("models.json")
         self.fileManager = fileManager
 
@@ -60,7 +68,7 @@ public actor FileModelStore: ModelStore {
         }
 
         let modelURL = URL(fileURLWithPath: model.path)
-        if isPathInsideRoot(modelURL), fileManager.fileExists(atPath: modelURL.path) {
+        if shouldRemoveFiles(at: modelURL), fileManager.fileExists(atPath: modelURL.path) {
             try fileManager.removeItem(at: modelURL)
         }
 
@@ -109,5 +117,20 @@ public actor FileModelStore: ModelStore {
         let rootPath = rootDirectory.standardizedFileURL.path
         let itemPath = url.standardizedFileURL.path
         return itemPath == rootPath || itemPath.hasPrefix(rootPath + "/")
+    }
+
+    private func shouldRemoveFiles(at url: URL) -> Bool {
+        let rootPath = rootDirectory.standardizedFileURL.path
+        let itemPath = url.standardizedFileURL.path
+        guard itemPath != "/", itemPath != rootPath else {
+            return false
+        }
+
+        switch removalPolicy {
+        case .storeRootOnly:
+            return isPathInsideRoot(url)
+        case .registeredPaths:
+            return true
+        }
     }
 }

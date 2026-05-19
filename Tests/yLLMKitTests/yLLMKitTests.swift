@@ -247,6 +247,65 @@ final class yLLMKitTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: modelDirectory.path))
     }
 
+    func testFileModelStoreDoesNotRemoveExternalPathByDefault() async throws {
+        let root = temporaryDirectory()
+        let externalRoot = temporaryDirectory()
+        defer {
+            try? FileManager.default.removeItem(at: root)
+            try? FileManager.default.removeItem(at: externalRoot)
+        }
+        let modelDirectory = externalRoot.appendingPathComponent("external-model")
+        try FileManager.default.createDirectory(at: modelDirectory, withIntermediateDirectories: true)
+
+        let store = try FileModelStore(rootDirectory: root)
+        try await store.register(
+            LocalModel(
+                id: "local-external-model",
+                modelID: "external-model",
+                backendID: "mock",
+                path: modelDirectory.path,
+                installedAt: Date(timeIntervalSince1970: 5)
+            )
+        )
+
+        try await store.removeModel(id: "external-model")
+
+        let removedModel = await store.localModel(for: "external-model")
+        XCTAssertNil(removedModel)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: modelDirectory.path))
+    }
+
+    func testFileModelStoreCanRemoveRegisteredExternalPath() async throws {
+        let root = temporaryDirectory()
+        let externalRoot = temporaryDirectory()
+        defer {
+            try? FileManager.default.removeItem(at: root)
+            try? FileManager.default.removeItem(at: externalRoot)
+        }
+        let modelDirectory = externalRoot.appendingPathComponent("external-model")
+        try FileManager.default.createDirectory(at: modelDirectory, withIntermediateDirectories: true)
+
+        let store = try FileModelStore(
+            rootDirectory: root,
+            removalPolicy: .registeredPaths
+        )
+        try await store.register(
+            LocalModel(
+                id: "local-external-model",
+                modelID: "external-model",
+                backendID: "mock",
+                path: modelDirectory.path,
+                installedAt: Date(timeIntervalSince1970: 6)
+            )
+        )
+
+        try await store.removeModel(id: "external-model")
+
+        let removedModel = await store.localModel(for: "external-model")
+        XCTAssertNil(removedModel)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: modelDirectory.path))
+    }
+
     func testRuntimeLoadsModelAndStreamsTokens() async throws {
         let model = mockModel(id: "chat-model", backendID: "mock")
         let registry = try ModelRegistry(models: [model])
