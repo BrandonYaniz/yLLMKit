@@ -42,6 +42,7 @@ public struct MockLLMBackend: LLMBackend {
                 ModelDownloadProgress(
                     modelID: request.model.id,
                     phase: .downloading,
+                    fractionCompleted: 0.5,
                     completedBytes: 1,
                     totalBytes: 2
                 )
@@ -53,6 +54,7 @@ public struct MockLLMBackend: LLMBackend {
                     ModelDownloadProgress(
                         modelID: request.model.id,
                         phase: .complete,
+                        fractionCompleted: 1.0,
                         completedBytes: 2,
                         totalBytes: 2,
                         localModel: localModel

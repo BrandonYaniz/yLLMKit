@@ -9,7 +9,8 @@ public struct ModelDownloadProgress: Codable, Sendable, Equatable {
 
     public var modelID: String
     public var phase: Phase
-    public var completedBytes: Int64
+    public var fractionCompleted: Double?
+    public var completedBytes: Int64?
     public var totalBytes: Int64?
     public var message: String?
     public var localModel: LocalModel?
@@ -17,13 +18,15 @@ public struct ModelDownloadProgress: Codable, Sendable, Equatable {
     public init(
         modelID: String,
         phase: Phase,
-        completedBytes: Int64 = 0,
+        fractionCompleted: Double? = nil,
+        completedBytes: Int64? = nil,
         totalBytes: Int64? = nil,
         message: String? = nil,
         localModel: LocalModel? = nil
     ) {
         self.modelID = modelID
         self.phase = phase
+        self.fractionCompleted = fractionCompleted
         self.completedBytes = completedBytes
         self.totalBytes = totalBytes
         self.message = message

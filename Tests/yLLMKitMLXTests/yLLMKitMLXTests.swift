@@ -68,6 +68,44 @@ final class yLLMKitMLXTests: XCTestCase {
         XCTAssertTrue(modelIDs.contains("phi-3.5-moe"))
     }
 
+    func testMLXProgressUsesFractionCompleted() {
+        let progress = Progress(totalUnitCount: 100)
+        progress.completedUnitCount = 42
+
+        let mapped = MLXDownloadProgressMapper.downloadingProgress(
+            modelID: "phi-2",
+            progress: progress,
+            message: nil
+        )
+
+        XCTAssertEqual(try XCTUnwrap(mapped.fractionCompleted), 0.42, accuracy: 0.0001)
+    }
+
+    func testMLXProgressDoesNotTreatUnitCountsAsBytes() {
+        let progress = Progress(totalUnitCount: 10)
+        progress.completedUnitCount = 0
+
+        let mapped = MLXDownloadProgressMapper.downloadingProgress(
+            modelID: "phi-2",
+            progress: progress,
+            message: nil
+        )
+
+        XCTAssertEqual(mapped.fractionCompleted, 0.0)
+        XCTAssertNil(mapped.completedBytes)
+        XCTAssertNil(mapped.totalBytes)
+    }
+
+    func testDownloadCompletionReportsCompleteFraction() {
+        let progress = ModelDownloadProgress(
+            modelID: "phi-2",
+            phase: .complete,
+            fractionCompleted: 1.0
+        )
+
+        XCTAssertEqual(progress.fractionCompleted, 1.0)
+    }
+
     func testMLXPromptBuilderUsesSingleUserPrompt() throws {
         let request = try MLXPromptBuilder.promptRequest(
             from: [

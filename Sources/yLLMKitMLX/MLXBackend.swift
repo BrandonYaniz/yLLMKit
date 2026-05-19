@@ -44,11 +44,9 @@ public actor MLXBackend: LLMBackend {
                         localModel: nil
                     ) { progress in
                         continuation.yield(
-                            ModelDownloadProgress(
+                            MLXDownloadProgressMapper.downloadingProgress(
                                 modelID: request.model.id,
-                                phase: .downloading,
-                                completedBytes: progress.completedUnitCount,
-                                totalBytes: progress.totalUnitCount > 0 ? progress.totalUnitCount : nil,
+                                progress: progress,
                                 message: progress.localizedDescription
                             )
                         )
@@ -63,6 +61,7 @@ public actor MLXBackend: LLMBackend {
                         ModelDownloadProgress(
                             modelID: request.model.id,
                             phase: .complete,
+                            fractionCompleted: 1.0,
                             completedBytes: loaded.completedBytes,
                             totalBytes: loaded.completedBytes,
                             localModel: loaded.localModel
@@ -187,6 +186,28 @@ private struct LoadedMLXContainer: Sendable {
     var container: ModelContainer
     var localModel: LocalModel?
     var completedBytes: Int64
+}
+
+enum MLXDownloadProgressMapper {
+    static func downloadingProgress(
+        modelID: String,
+        progress: Progress,
+        message: String?
+    ) -> ModelDownloadProgress {
+        ModelDownloadProgress(
+            modelID: modelID,
+            phase: .downloading,
+            fractionCompleted: clampedFraction(progress.fractionCompleted),
+            message: message
+        )
+    }
+
+    private static func clampedFraction(_ value: Double) -> Double? {
+        guard value.isFinite else {
+            return nil
+        }
+        return min(1.0, max(0.0, value))
+    }
 }
 
 private actor DownloadRecorder {

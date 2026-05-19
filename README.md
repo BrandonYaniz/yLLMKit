@@ -179,6 +179,21 @@ The planned model workflow is:
 
 Model IDs should come from manifests so app code does not need to hardcode provider-specific repository names.
 
+Use `ModelDownloadProgress.fractionCompleted` for progress bars. The byte fields are optional and are only for byte labels when the backend knows the units are real bytes:
+
+```swift
+let stream = try await runtime.downloadAndInstallModel(id: "phi-2")
+for try await progress in stream {
+    if let fraction = progress.fractionCompleted {
+        percent = fraction
+    }
+
+    if let completed = progress.completedBytes, let total = progress.totalBytes {
+        byteLabel = "\(completed) / \(total) bytes"
+    }
+}
+```
+
 `FileModelStore` removes files under its own root by default. Use `removalPolicy: .registeredPaths` when you want `runtime.removeModel(id:)` to also delete backend-managed model directories registered outside the store root, such as Hugging Face cache snapshots used by MLX.
 
 ## Supported Models

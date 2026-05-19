@@ -98,6 +98,22 @@ public struct ModelDescriptor: Codable, Sendable, Identifiable, Equatable {
 }
 ```
 
+## ModelDownloadProgress
+
+```swift
+public struct ModelDownloadProgress: Codable, Sendable, Equatable {
+    public var modelID: String
+    public var phase: Phase
+    public var fractionCompleted: Double?
+    public var completedBytes: Int64?
+    public var totalBytes: Int64?
+    public var message: String?
+    public var localModel: LocalModel?
+}
+```
+
+Use `fractionCompleted` for percent UI. `completedBytes` and `totalBytes` are optional because some backends report file counts or synthetic work units instead of bytes.
+
 ## ModelCapabilities
 
 ```swift
