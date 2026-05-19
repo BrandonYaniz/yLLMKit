@@ -35,7 +35,7 @@ public final class MLXSession: LLMSession, @unchecked Sendable {
                     session.generateParameters = GenerateParameters(settings: settings)
 
                     var index = 0
-                    let prompt = promptText(from: messages)
+                    let prompt = MLXPromptBuilder.promptText(from: messages)
                     for try await chunk in session.streamResponse(to: prompt) {
                         if state.isCancelled || Task.isCancelled {
                             continuation.finish(throwing: LLMError.generationCancelled)
@@ -64,24 +64,6 @@ public final class MLXSession: LLMSession, @unchecked Sendable {
 
     public func cancel() {
         state.cancel()
-    }
-
-    private func promptText(from messages: [LLMMessage]) -> String {
-        messages
-            .filter { $0.role != .system }
-            .map { message in
-                switch message.role {
-                case .user:
-                    return "User: \(message.content)"
-                case .assistant:
-                    return "Assistant: \(message.content)"
-                case .tool:
-                    return "Tool: \(message.content)"
-                case .system:
-                    return message.content
-                }
-            }
-            .joined(separator: "\n\n")
     }
 }
 

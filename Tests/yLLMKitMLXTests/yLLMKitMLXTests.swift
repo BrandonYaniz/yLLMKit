@@ -1,8 +1,9 @@
 #if canImport(XCTest)
+import Foundation
 import MLXLMCommon
 import XCTest
 import yLLMKit
-import yLLMKitMLX
+@testable import yLLMKitMLX
 
 final class yLLMKitMLXTests: XCTestCase {
     func testMLXConfigurationUsesRepositoryAndRevision() {
@@ -65,6 +66,81 @@ final class yLLMKitMLXTests: XCTestCase {
         XCTAssertTrue(modelIDs.contains("phi-2"))
         XCTAssertTrue(modelIDs.contains("phi-3.5-mini"))
         XCTAssertTrue(modelIDs.contains("phi-3.5-moe"))
+    }
+
+    func testMLXPromptBuilderUsesBareSingleUserPrompt() {
+        let prompt = MLXPromptBuilder.promptText(
+            from: [
+                LLMMessage(role: .system, content: "Be concise."),
+                LLMMessage(role: .user, content: "Say hello.")
+            ]
+        )
+
+        XCTAssertEqual(prompt, "Say hello.")
+    }
+
+    func testMLXPromptBuilderFormatsConversationTranscript() {
+        let prompt = MLXPromptBuilder.promptText(
+            from: [
+                LLMMessage(role: .system, content: "Be concise."),
+                LLMMessage(role: .user, content: "Hello."),
+                LLMMessage(role: .assistant, content: "Hi."),
+                LLMMessage(role: .user, content: "What next?")
+            ]
+        )
+
+        XCTAssertEqual(
+            prompt,
+            """
+            User: Hello.
+
+            Assistant: Hi.
+
+            User: What next?
+            """
+        )
+    }
+
+    func testLiveMLXSmokeWhenEnabled() async throws {
+        guard ProcessInfo.processInfo.environment["YLLMKIT_RUN_MLX_SMOKE"] == "1" else {
+            throw XCTSkip("Set YLLMKIT_RUN_MLX_SMOKE=1 to run a live MLX download/inference smoke test.")
+        }
+
+        let modelID = ProcessInfo.processInfo.environment["YLLMKIT_MLX_SMOKE_MODEL"] ?? "phi-2"
+        let registry = try ModelRegistry(models: SupportedModelCatalog.all)
+        let storeRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("yLLMKitMLXSmoke")
+            .appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: storeRoot) }
+
+        let runtime = try LLMRuntime(
+            modelRegistry: registry,
+            modelStore: try FileModelStore(rootDirectory: storeRoot),
+            backends: [MLXBackend()]
+        )
+
+        let stream = try await runtime.downloadAndInstallModel(id: modelID)
+        for try await _ in stream {}
+
+        try await runtime.loadModel(id: modelID)
+        let session = try await runtime.createSession(
+            modelID: modelID,
+            configuration: SessionConfiguration(systemPrompt: "Answer briefly.")
+        )
+
+        var output = ""
+        for try await token in session.streamResponse(
+            to: [LLMMessage(role: .user, content: "Reply with the word ready.")],
+            settings: GenerationSettings(
+                temperature: 0.0,
+                topP: 1.0,
+                maxTokens: 8
+            )
+        ) {
+            output += token.text
+        }
+
+        XCTAssertFalse(output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
     }
 }
 #endif

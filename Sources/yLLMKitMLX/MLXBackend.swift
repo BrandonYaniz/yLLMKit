@@ -143,20 +143,22 @@ public actor MLXBackend: LLMBackend {
             progressHandler: progressHandler
         )
         let localURL = await recorder.lastDownloadedURL()
+        let completedBytes = localURL.flatMap { directorySize(at: $0) } ?? 0
         let localModel = localURL.map { url in
             LocalModel(
                 id: "local-\(model.id)",
                 modelID: model.id,
                 backendID: model.backendID,
                 path: url.path,
-                installedAt: Date()
+                installedAt: Date(),
+                sizeBytes: completedBytes
             )
         }
 
         return LoadedMLXContainer(
             container: container,
             localModel: localModel,
-            completedBytes: localURL.flatMap { directorySize(at: $0) } ?? 0
+            completedBytes: completedBytes
         )
     }
 
