@@ -90,11 +90,13 @@ final class yLLMKitTests: XCTestCase {
         XCTAssertEqual(decoded, manifest)
     }
 
-    func testSupportedModelCatalogIncludesPhiModels() throws {
+    func testSupportedModelCatalogIncludesPhiModels() async throws {
         let registry = try ModelRegistry(models: SupportedModelCatalog.all)
 
         let phiModels = await registry.models(forBackend: "mlx")
             .filter { $0.id.hasPrefix("phi-") }
+        let phiMiniRepository = try await registry.model(id: "phi-3.5-mini").repository
+        let phiMoEStopSequences = try await registry.model(id: "phi-3.5-moe").defaultSettings.stopSequences
 
         XCTAssertEqual(
             phiModels.map(\.id),
@@ -104,14 +106,8 @@ final class yLLMKitTests: XCTestCase {
                 "phi-3.5-moe",
             ]
         )
-        XCTAssertEqual(
-            try await registry.model(id: "phi-3.5-mini").repository,
-            "mlx-community/Phi-3.5-mini-instruct-4bit"
-        )
-        XCTAssertEqual(
-            try await registry.model(id: "phi-3.5-moe").defaultSettings.stopSequences,
-            ["<|end|>"]
-        )
+        XCTAssertEqual(phiMiniRepository, "mlx-community/Phi-3.5-mini-instruct-4bit")
+        XCTAssertEqual(phiMoEStopSequences, ["<|end|>"])
     }
 
     func testModelRegistryLoadsManifestData() async throws {
@@ -195,10 +191,11 @@ final class yLLMKitTests: XCTestCase {
 
         try await store.register(localModel)
 
-        let storedModel = try await store.localModel(for: "fast-local-assistant")
+        let storedModel = await store.localModel(for: "fast-local-assistant")
+        let isInstalled = await store.isModelInstalled("fast-local-assistant")
         XCTAssertEqual(storedModel?.modelID, "fast-local-assistant")
         XCTAssertEqual(storedModel?.sizeBytes, 5)
-        XCTAssertTrue(try await store.isModelInstalled("fast-local-assistant"))
+        XCTAssertTrue(isInstalled)
     }
 
     func testFileModelStorePersistsIndex() async throws {
@@ -220,7 +217,7 @@ final class yLLMKitTests: XCTestCase {
         )
 
         let secondStore = try FileModelStore(rootDirectory: root)
-        let localModels = try await secondStore.localModels()
+        let localModels = await secondStore.localModels()
 
         XCTAssertEqual(localModels.map(\.modelID), ["mock-model"])
         XCTAssertEqual(localModels.first?.sizeBytes, 10)
@@ -245,7 +242,8 @@ final class yLLMKitTests: XCTestCase {
 
         try await store.removeModel(id: "remove-me")
 
-        XCTAssertNil(try await store.localModel(for: "remove-me"))
+        let removedModel = await store.localModel(for: "remove-me")
+        XCTAssertNil(removedModel)
         XCTAssertFalse(FileManager.default.fileExists(atPath: modelDirectory.path))
     }
 
@@ -343,10 +341,11 @@ final class yLLMKitTests: XCTestCase {
             phases.append(progress.phase)
         }
 
-        let localModel = try await store.localModel(for: "downloadable-model")
+        let localModel = await store.localModel(for: "downloadable-model")
+        let isInstalled = await store.isModelInstalled("downloadable-model")
         XCTAssertEqual(phases, [.queued, .downloading, .complete])
         XCTAssertEqual(localModel?.modelID, "downloadable-model")
-        XCTAssertTrue(try await store.isModelInstalled("downloadable-model"))
+        XCTAssertTrue(isInstalled)
     }
 
     func testSessionDefaultResponseAggregatesStreamedTokens() async throws {
