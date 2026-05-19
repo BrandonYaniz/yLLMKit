@@ -6,7 +6,8 @@ public final class MLXSession: LLMSession, @unchecked Sendable {
     public let id: UUID
     public let model: ModelDescriptor
 
-    private let session: ChatSession
+    private let container: ModelContainer
+    private let baseInstructions: String?
     private let state = CancellationState()
 
     public init(
@@ -17,11 +18,8 @@ public final class MLXSession: LLMSession, @unchecked Sendable {
     ) {
         self.id = id
         self.model = model
-        self.session = ChatSession(
-            container,
-            instructions: configuration.systemPrompt,
-            generateParameters: GenerateParameters(settings: model.defaultSettings)
-        )
+        self.container = container
+        self.baseInstructions = configuration.systemPrompt
     }
 
     public func streamResponse(
@@ -32,11 +30,21 @@ public final class MLXSession: LLMSession, @unchecked Sendable {
             state.reset()
             let task = Task {
                 do {
-                    session.generateParameters = GenerateParameters(settings: settings)
-
                     var index = 0
-                    let prompt = MLXPromptBuilder.promptText(from: messages)
-                    for try await chunk in session.streamResponse(to: prompt) {
+                    let request = try MLXPromptBuilder.promptRequest(from: messages)
+                    let session = ChatSession(
+                        container,
+                        instructions: combinedInstructions(request.instructions),
+                        history: request.history,
+                        generateParameters: GenerateParameters(settings: settings)
+                    )
+
+                    for try await chunk in session.streamResponse(
+                        to: request.prompt.content,
+                        role: request.prompt.role,
+                        images: [],
+                        videos: []
+                    ) {
                         if state.isCancelled || Task.isCancelled {
                             continuation.finish(throwing: LLMError.generationCancelled)
                             return
@@ -64,6 +72,22 @@ public final class MLXSession: LLMSession, @unchecked Sendable {
 
     public func cancel() {
         state.cancel()
+    }
+
+    private func combinedInstructions(_ requestInstructions: String?) -> String? {
+        [baseInstructions, requestInstructions]
+            .compactMap { value in
+                value?.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            .filter { !$0.isEmpty }
+            .joined(separator: "\n\n")
+            .nilIfEmpty
+    }
+}
+
+private extension String {
+    var nilIfEmpty: String? {
+        isEmpty ? nil : self
     }
 }
 

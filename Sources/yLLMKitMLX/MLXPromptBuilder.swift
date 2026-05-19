@@ -1,26 +1,50 @@
+import MLXLMCommon
 import yLLMKit
 
 enum MLXPromptBuilder {
-    static func promptText(from messages: [LLMMessage]) -> String {
-        let promptMessages = messages.filter { $0.role != .system }
+    struct PromptRequest {
+        var instructions: String?
+        var history: [Chat.Message]
+        var prompt: Chat.Message
+    }
 
-        if promptMessages.count == 1, let message = promptMessages.first {
-            return message.content
+    static func promptRequest(from messages: [LLMMessage]) throws -> PromptRequest {
+        let instructions = messages
+            .filter { $0.role == .system }
+            .map(\.content)
+            .joined(separator: "\n\n")
+        let chatMessages = messages
+            .filter { $0.role != .system }
+            .map(chatMessage)
+
+        guard let prompt = chatMessages.last else {
+            throw LLMError.invalidRequest("At least one non-system message is required.")
         }
 
-        return promptMessages
-            .map { message in
-                switch message.role {
-                case .user:
-                    return "User: \(message.content)"
-                case .assistant:
-                    return "Assistant: \(message.content)"
-                case .tool:
-                    return "Tool: \(message.content)"
-                case .system:
-                    return message.content
-                }
-            }
-            .joined(separator: "\n\n")
+        return PromptRequest(
+            instructions: instructions.isEmpty ? nil : instructions,
+            history: Array(chatMessages.dropLast()),
+            prompt: prompt
+        )
+    }
+
+    private static func chatMessage(from message: LLMMessage) -> Chat.Message {
+        Chat.Message(
+            role: chatRole(from: message.role),
+            content: message.content
+        )
+    }
+
+    private static func chatRole(from role: LLMMessage.Role) -> Chat.Message.Role {
+        switch role {
+        case .system:
+            return .system
+        case .user:
+            return .user
+        case .assistant:
+            return .assistant
+        case .tool:
+            return .tool
+        }
     }
 }

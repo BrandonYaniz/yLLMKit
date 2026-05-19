@@ -68,19 +68,22 @@ final class yLLMKitMLXTests: XCTestCase {
         XCTAssertTrue(modelIDs.contains("phi-3.5-moe"))
     }
 
-    func testMLXPromptBuilderUsesBareSingleUserPrompt() {
-        let prompt = MLXPromptBuilder.promptText(
+    func testMLXPromptBuilderUsesSingleUserPrompt() throws {
+        let request = try MLXPromptBuilder.promptRequest(
             from: [
                 LLMMessage(role: .system, content: "Be concise."),
                 LLMMessage(role: .user, content: "Say hello.")
             ]
         )
 
-        XCTAssertEqual(prompt, "Say hello.")
+        XCTAssertEqual(request.instructions, "Be concise.")
+        XCTAssertTrue(request.history.isEmpty)
+        XCTAssertEqual(request.prompt.role, .user)
+        XCTAssertEqual(request.prompt.content, "Say hello.")
     }
 
-    func testMLXPromptBuilderFormatsConversationTranscript() {
-        let prompt = MLXPromptBuilder.promptText(
+    func testMLXPromptBuilderKeepsStructuredConversationHistory() throws {
+        let request = try MLXPromptBuilder.promptRequest(
             from: [
                 LLMMessage(role: .system, content: "Be concise."),
                 LLMMessage(role: .user, content: "Hello."),
@@ -89,15 +92,18 @@ final class yLLMKitMLXTests: XCTestCase {
             ]
         )
 
-        XCTAssertEqual(
-            prompt,
-            """
-            User: Hello.
+        XCTAssertEqual(request.instructions, "Be concise.")
+        XCTAssertEqual(request.history.map(\.role), [.user, .assistant])
+        XCTAssertEqual(request.history.map(\.content), ["Hello.", "Hi."])
+        XCTAssertEqual(request.prompt.role, .user)
+        XCTAssertEqual(request.prompt.content, "What next?")
+    }
 
-            Assistant: Hi.
-
-            User: What next?
-            """
+    func testMLXPromptBuilderRejectsSystemOnlyMessages() {
+        XCTAssertThrowsError(
+            try MLXPromptBuilder.promptRequest(
+                from: [LLMMessage(role: .system, content: "Be concise.")]
+            )
         )
     }
 
