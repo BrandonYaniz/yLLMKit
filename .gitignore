@@ -25,4 +25,5 @@ playground.xcworkspace
 xcuserdata/
 DerivedData/
 codex/
-
+default.metallib
+.mlx-metal-build/

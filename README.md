@@ -15,6 +15,7 @@ The MLX backend is available as a separate `yLLMKitMLX` product so apps that onl
 - Swift 6.2 or later.
 - macOS 14 or later.
 - Apple Silicon is recommended for local model inference.
+- Full Xcode is required for live MLX smoke tests because MLX needs the Metal compiler.
 
 The core package is UI-neutral. You can use it from SwiftUI, AppKit, command line tools, or other Swift application layers.
 
@@ -209,13 +210,23 @@ swift test
 To run a live MLX download/inference smoke test, opt in explicitly:
 
 ```sh
-YLLMKIT_RUN_MLX_SMOKE=1 swift test
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift build
+./scripts/prepare-mlx-metallib.sh
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer YLLMKIT_RUN_MLX_SMOKE=1 swift test --enable-xctest --disable-swift-testing --filter yLLMKitMLXTests.testLiveMLXSmokeWhenEnabled
 ```
 
 The smoke test defaults to `phi-2`. To use another supported model:
 
 ```sh
-YLLMKIT_RUN_MLX_SMOKE=1 YLLMKIT_MLX_SMOKE_MODEL=fast-local-assistant swift test
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer YLLMKIT_RUN_MLX_SMOKE=1 YLLMKIT_MLX_SMOKE_MODEL=fast-local-assistant swift test --enable-xctest --disable-swift-testing --filter yLLMKitMLXTests.testLiveMLXSmokeWhenEnabled
+```
+
+If Xcode reports that the Metal Toolchain is missing, install or export it first:
+
+```sh
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -downloadComponent MetalToolchain -exportPath /private/tmp/yLLMKit-MetalToolchain
+hdiutil attach /private/tmp/yLLMKit-MetalToolchain/MetalToolchain-*.exportedBundle/Restore/*.dmg -nobrowse -readonly -mountpoint /private/tmp/yLLMKit-MetalToolchainMount
+METAL_TOOLCHAIN_DIR=/private/tmp/yLLMKit-MetalToolchainMount/Metal.xctoolchain ./scripts/prepare-mlx-metallib.sh
 ```
 
 Development notes used by local tooling are kept outside the public documentation path and are ignored by git.
