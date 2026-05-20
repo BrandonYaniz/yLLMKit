@@ -20,6 +20,10 @@ let package = Package(
         .library(
             name: "yLLMKitOpenAI",
             targets: ["yLLMKitOpenAI"]
+        ),
+        .library(
+            name: "yLLMKitAnthropic",
+            targets: ["yLLMKitAnthropic"]
         )
     ],
     dependencies: [
@@ -46,6 +50,10 @@ let package = Package(
             name: "yLLMKitOpenAI",
             dependencies: ["yLLMKit"]
         ),
+        .target(
+            name: "yLLMKitAnthropic",
+            dependencies: ["yLLMKit"]
+        ),
         .testTarget(
             name: "yLLMKitTests",
             dependencies: ["yLLMKit"]
@@ -62,6 +70,13 @@ let package = Package(
             dependencies: [
                 "yLLMKit",
                 "yLLMKitOpenAI"
+            ]
+        ),
+        .testTarget(
+            name: "yLLMKitAnthropicTests",
+            dependencies: [
+                "yLLMKit",
+                "yLLMKitAnthropic"
             ]
         )
     ]
