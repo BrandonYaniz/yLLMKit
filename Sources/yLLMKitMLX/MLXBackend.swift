@@ -13,11 +13,13 @@ public actor MLXBackend: LLMBackend {
     private let models: [ModelDescriptor]
     private var containersByModelID: [String: ModelContainer]
     private var localModelsByModelID: [String: LocalModel]
+    private var loadingContainersByModelID: [String: Task<LoadedMLXContainer, Error>]
 
     public init(models: [ModelDescriptor] = SupportedModelCatalog.all.filter { $0.backendID == "mlx" }) {
         self.models = models
         self.containersByModelID = [:]
         self.localModelsByModelID = [:]
+        self.loadingContainersByModelID = [:]
     }
 
     public func availableModels() async throws -> [ModelDescriptor] {
@@ -39,7 +41,7 @@ public actor MLXBackend: LLMBackend {
                         )
                     )
 
-                    let loaded = try await loadContainer(
+                    let loaded = try await Self.loadContainer(
                         for: request.model,
                         localModel: nil
                     ) { progress in
@@ -81,7 +83,7 @@ public actor MLXBackend: LLMBackend {
 
     public func loadModel(_ model: ModelDescriptor, from localModel: LocalModel?) async throws -> LoadedModel {
         if containersByModelID[model.id] == nil {
-            let loaded = try await loadContainer(for: model, localModel: localModel)
+            let loaded = try await loadedContainer(for: model, localModel: localModel)
             containersByModelID[model.id] = loaded.container
             if let localModel = loaded.localModel {
                 localModelsByModelID[model.id] = localModel
@@ -96,6 +98,8 @@ public actor MLXBackend: LLMBackend {
 
     public func unloadModel(_ modelID: String) async throws {
         containersByModelID.removeValue(forKey: modelID)
+        loadingContainersByModelID[modelID]?.cancel()
+        loadingContainersByModelID.removeValue(forKey: modelID)
     }
 
     public func createSession(
@@ -113,7 +117,30 @@ public actor MLXBackend: LLMBackend {
         )
     }
 
-    private func loadContainer(
+    private func loadedContainer(
+        for model: ModelDescriptor,
+        localModel: LocalModel?
+    ) async throws -> LoadedMLXContainer {
+        if let task = loadingContainersByModelID[model.id] {
+            return try await task.value
+        }
+
+        let task = Task {
+            try await Self.loadContainer(for: model, localModel: localModel)
+        }
+        loadingContainersByModelID[model.id] = task
+
+        do {
+            let loaded = try await task.value
+            loadingContainersByModelID[model.id] = nil
+            return loaded
+        } catch {
+            loadingContainersByModelID[model.id] = nil
+            throw error
+        }
+    }
+
+    private static func loadContainer(
         for model: ModelDescriptor,
         localModel: LocalModel?,
         progressHandler: @Sendable @escaping (Progress) -> Void = { _ in }
@@ -161,7 +188,7 @@ public actor MLXBackend: LLMBackend {
         )
     }
 
-    private nonisolated func directorySize(at url: URL) -> Int64? {
+    private static func directorySize(at url: URL) -> Int64? {
         guard let enumerator = FileManager.default.enumerator(
             at: url,
             includingPropertiesForKeys: [.fileSizeKey, .isRegularFileKey]

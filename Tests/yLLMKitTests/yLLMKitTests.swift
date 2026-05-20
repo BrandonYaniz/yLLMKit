@@ -337,6 +337,40 @@ final class yLLMKitTests: XCTestCase {
         XCTAssertEqual(tokens.map(\.text), ["mock", " response"])
     }
 
+    func testRuntimeCoalescesConcurrentModelLoads() async throws {
+        let model = mockModel(id: "shared-load-model", backendID: "counting")
+        let registry = try ModelRegistry(models: [model])
+        let root = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = try FileModelStore(rootDirectory: root)
+        try await registerInstalledMockModel(model, in: store, root: root)
+        let backend = CountingBackend(models: [model])
+        let runtime = try LLMRuntime(
+            modelRegistry: registry,
+            modelStore: store,
+            backends: [backend]
+        )
+
+        let loadedModels = try await withThrowingTaskGroup(of: LoadedModel.self) { group in
+            for _ in 0..<5 {
+                group.addTask {
+                    try await runtime.loadModel(id: model.id)
+                }
+            }
+
+            var values: [LoadedModel] = []
+            for try await value in group {
+                values.append(value)
+            }
+            return values
+        }
+
+        let loadCount = await backend.loadCount
+        XCTAssertEqual(loadedModels.count, 5)
+        XCTAssertEqual(Set(loadedModels.map(\.id)), [model.id])
+        XCTAssertEqual(loadCount, 1)
+    }
+
     func testMockSessionHonorsStopSequences() async throws {
         let session = MockLLMSession(
             model: mockModel(id: "stop-model", backendID: "mock"),
@@ -501,6 +535,49 @@ final class yLLMKitTests: XCTestCase {
         XCTAssertTrue(isInstalled)
     }
 
+    func testRuntimeCoalescesConcurrentDownloads() async throws {
+        let root = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let model = mockModel(id: "shared-download-model", backendID: "counting")
+        let registry = try ModelRegistry(models: [model])
+        let store = try FileModelStore(rootDirectory: root)
+        let backend = CountingBackend(
+            models: [model],
+            downloadRoot: root.appendingPathComponent("downloads")
+        )
+        let runtime = try LLMRuntime(
+            modelRegistry: registry,
+            modelStore: store,
+            backends: [backend]
+        )
+
+        let phaseSets = try await withThrowingTaskGroup(of: [ModelDownloadProgress.Phase].self) { group in
+            for _ in 0..<4 {
+                group.addTask {
+                    let stream = try await runtime.downloadAndInstallModel(id: model.id)
+                    var phases: [ModelDownloadProgress.Phase] = []
+                    for try await progress in stream {
+                        phases.append(progress.phase)
+                    }
+                    return phases
+                }
+            }
+
+            var values: [[ModelDownloadProgress.Phase]] = []
+            for try await value in group {
+                values.append(value)
+            }
+            return values
+        }
+
+        let downloadCount = await backend.downloadCount
+        let isInstalled = await store.isModelInstalled(model.id)
+        XCTAssertEqual(phaseSets.count, 4)
+        XCTAssertTrue(phaseSets.allSatisfy { $0 == [.queued, .downloading, .complete] })
+        XCTAssertEqual(downloadCount, 1)
+        XCTAssertTrue(isInstalled)
+    }
+
     func testSessionDefaultResponseAggregatesStreamedTokens() async throws {
         let session = StreamOnlySession(model: mockModel(id: "stream-model", backendID: "mock"))
 
@@ -568,6 +645,114 @@ private struct StreamOnlySession: LLMSession {
     }
 
     func cancel() {}
+}
+
+private actor CountingBackend: LLMBackend {
+    let id = "counting"
+    let name = "Counting"
+
+    private let models: [ModelDescriptor]
+    private let downloadRoot: URL?
+    private(set) var loadCount = 0
+    private(set) var downloadCount = 0
+
+    init(models: [ModelDescriptor], downloadRoot: URL? = nil) {
+        self.models = models
+        self.downloadRoot = downloadRoot
+    }
+
+    func availableModels() async throws -> [ModelDescriptor] {
+        models
+    }
+
+    func localModels() async throws -> [LocalModel] {
+        []
+    }
+
+    func downloadModel(_ request: ModelDownloadRequest) async -> AsyncThrowingStream<ModelDownloadProgress, Error> {
+        downloadCount += 1
+        let downloadRoot = downloadRoot
+
+        return AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    continuation.yield(
+                        ModelDownloadProgress(
+                            modelID: request.model.id,
+                            phase: .queued
+                        )
+                    )
+                    try await Task.sleep(nanoseconds: 30_000_000)
+                    continuation.yield(
+                        ModelDownloadProgress(
+                            modelID: request.model.id,
+                            phase: .downloading,
+                            fractionCompleted: 0.5
+                        )
+                    )
+                    let localModel = try Self.installMockModel(
+                        request.model,
+                        downloadRoot: downloadRoot
+                    )
+                    continuation.yield(
+                        ModelDownloadProgress(
+                            modelID: request.model.id,
+                            phase: .complete,
+                            fractionCompleted: 1.0,
+                            localModel: localModel
+                        )
+                    )
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+
+            continuation.onTermination = { @Sendable _ in
+                task.cancel()
+            }
+        }
+    }
+
+    func loadModel(_ model: ModelDescriptor, from localModel: LocalModel?) async throws -> LoadedModel {
+        loadCount += 1
+        try await Task.sleep(nanoseconds: 30_000_000)
+        return LoadedModel(model: model, localModel: localModel)
+    }
+
+    func unloadModel(_ modelID: String) async throws {}
+
+    func createSession(
+        model: LoadedModel,
+        configuration: SessionConfiguration
+    ) async throws -> any LLMSession {
+        MockLLMSession(model: model.model)
+    }
+
+    private static func installMockModel(
+        _ model: ModelDescriptor,
+        downloadRoot: URL?
+    ) throws -> LocalModel? {
+        guard let downloadRoot else {
+            return nil
+        }
+
+        let modelDirectory = downloadRoot.appendingPathComponent(model.id)
+        try FileManager.default.createDirectory(
+            at: modelDirectory,
+            withIntermediateDirectories: true
+        )
+        try Data("mock model".utf8).write(
+            to: modelDirectory.appendingPathComponent("weights.bin")
+        )
+        return LocalModel(
+            id: "local-\(model.id)",
+            modelID: model.id,
+            backendID: model.backendID,
+            path: modelDirectory.path,
+            installedAt: Date(timeIntervalSince1970: 7)
+        )
+    }
 }
 #else
 import Foundation
