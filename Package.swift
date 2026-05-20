@@ -16,6 +16,10 @@ let package = Package(
         .library(
             name: "yLLMKitMLX",
             targets: ["yLLMKitMLX"]
+        ),
+        .library(
+            name: "yLLMKitOpenAI",
+            targets: ["yLLMKitOpenAI"]
         )
     ],
     dependencies: [
@@ -38,6 +42,10 @@ let package = Package(
                 .product(name: "Tokenizers", package: "swift-transformers")
             ]
         ),
+        .target(
+            name: "yLLMKitOpenAI",
+            dependencies: ["yLLMKit"]
+        ),
         .testTarget(
             name: "yLLMKitTests",
             dependencies: ["yLLMKit"]
@@ -47,6 +55,13 @@ let package = Package(
             dependencies: [
                 "yLLMKit",
                 "yLLMKitMLX"
+            ]
+        ),
+        .testTarget(
+            name: "yLLMKitOpenAITests",
+            dependencies: [
+                "yLLMKit",
+                "yLLMKitOpenAI"
             ]
         )
     ]
