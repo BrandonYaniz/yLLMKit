@@ -9,21 +9,27 @@ enum MLXPromptBuilder {
     }
 
     static func promptRequest(from messages: [LLMMessage]) throws -> PromptRequest {
-        let instructions = messages
-            .filter { $0.role == .system }
-            .map(\.content)
-            .joined(separator: "\n\n")
-        let chatMessages = messages
-            .filter { $0.role != .system }
-            .map(chatMessage)
+        var instructionParts: [String] = []
+        var chatMessages: [Chat.Message] = []
+        instructionParts.reserveCapacity(messages.count)
+        chatMessages.reserveCapacity(messages.count)
 
-        guard let prompt = chatMessages.last else {
+        for message in messages {
+            if message.role == .system {
+                instructionParts.append(message.content)
+            } else {
+                chatMessages.append(chatMessage(from: message))
+            }
+        }
+
+        guard let prompt = chatMessages.popLast() else {
             throw LLMError.invalidRequest("At least one non-system message is required.")
         }
 
+        let instructions = instructionParts.joined(separator: "\n\n")
         return PromptRequest(
             instructions: instructions.isEmpty ? nil : instructions,
-            history: Array(chatMessages.dropLast()),
+            history: chatMessages,
             prompt: prompt
         )
     }

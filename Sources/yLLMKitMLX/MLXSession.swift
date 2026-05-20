@@ -146,7 +146,7 @@ private struct StopSequenceFilter {
         buffer += text
         if let stopRange = earliestStopRange(in: buffer) {
             let output = String(buffer[..<stopRange.lowerBound])
-            buffer.removeAll(keepingCapacity: false)
+            buffer.removeAll(keepingCapacity: true)
             return (output, true)
         }
 
@@ -156,12 +156,12 @@ private struct StopSequenceFilter {
 
         let splitIndex = buffer.index(buffer.endIndex, offsetBy: -retainedSuffixLength)
         let output = String(buffer[..<splitIndex])
-        buffer = String(buffer[splitIndex...])
+        buffer.removeSubrange(..<splitIndex)
         return (output, false)
     }
 
     mutating func finish() -> String? {
-        defer { buffer.removeAll(keepingCapacity: false) }
+        defer { buffer.removeAll(keepingCapacity: true) }
         return buffer.isEmpty ? nil : buffer
     }
 
