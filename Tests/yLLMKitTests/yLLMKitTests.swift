@@ -589,6 +589,12 @@ final class yLLMKitTests: XCTestCase {
         XCTAssertEqual(response.content, "streamed response")
         XCTAssertEqual(response.finishReason, .stop)
         XCTAssertEqual(response.tokens.map(\.text), ["streamed", " response"])
+        XCTAssertEqual(response.metrics?.modelID, "stream-model")
+        XCTAssertEqual(response.metrics?.outputTokenCount, 2)
+        XCTAssertEqual(response.metrics?.wasWarm, true)
+        XCTAssertNotNil(response.metrics?.firstTokenLatencySeconds)
+        XCTAssertNotNil(response.metrics?.totalGenerationSeconds)
+        XCTAssertNotNil(response.metrics?.tokensPerSecond)
     }
 
     private func temporaryDirectory() -> URL {
