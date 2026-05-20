@@ -5,14 +5,17 @@ public struct LoadedModel: Sendable, Identifiable, Equatable {
     public var model: ModelDescriptor
     public var localModel: LocalModel?
     public var loadedAt: Date
+    public var loadTimeSeconds: Double?
 
     public init(
         model: ModelDescriptor,
         localModel: LocalModel? = nil,
-        loadedAt: Date = Date()
+        loadedAt: Date = Date(),
+        loadTimeSeconds: Double? = nil
     ) {
         self.model = model
         self.localModel = localModel
         self.loadedAt = loadedAt
+        self.loadTimeSeconds = loadTimeSeconds
     }
 }

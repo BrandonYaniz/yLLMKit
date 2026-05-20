@@ -145,6 +145,28 @@ final class yLLMKitMLXTests: XCTestCase {
         )
     }
 
+    func testGenerationStateRejectsOverlappingRuns() {
+        let state = GenerationState()
+
+        let first = state.beginGeneration()
+        let second = state.beginGeneration()
+
+        XCTAssertNotNil(first)
+        XCTAssertNil(second)
+    }
+
+    func testGenerationStateAllowsRunAfterCancellationFinishes() throws {
+        let state = GenerationState()
+        let first = try XCTUnwrap(state.beginGeneration())
+
+        state.cancelActiveGeneration()
+        XCTAssertTrue(state.isCancelled(first))
+        state.finishGeneration(first)
+
+        let second = state.beginGeneration()
+        XCTAssertNotNil(second)
+    }
+
     func testLiveMLXSmokeWhenEnabled() async throws {
         guard ProcessInfo.processInfo.environment["YLLMKIT_RUN_MLX_SMOKE"] == "1" else {
             throw XCTSkip("Set YLLMKIT_RUN_MLX_SMOKE=1 to run a live MLX download/inference smoke test.")

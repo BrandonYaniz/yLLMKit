@@ -172,7 +172,7 @@ private struct StopSequenceFilter {
     }
 }
 
-private final class GenerationState: @unchecked Sendable {
+final class GenerationState: @unchecked Sendable {
     private let lock = NSLock()
     private var activeGenerationID: UUID?
     private var cancelledGenerationIDs: Set<UUID> = []

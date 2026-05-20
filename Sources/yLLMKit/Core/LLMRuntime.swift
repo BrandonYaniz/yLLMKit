@@ -136,7 +136,10 @@ public actor LLMRuntime {
             throw LLMError.modelNotInstalled(modelID)
         }
 
-        return try await backend.loadModel(model, from: localModel)
+        let startedAt = Date()
+        var loadedModel = try await backend.loadModel(model, from: localModel)
+        loadedModel.loadTimeSeconds = Date().timeIntervalSince(startedAt)
+        return loadedModel
     }
 
     public func unloadModel(id modelID: String) async throws {

@@ -368,6 +368,7 @@ final class yLLMKitTests: XCTestCase {
         let loadCount = await backend.loadCount
         XCTAssertEqual(loadedModels.count, 5)
         XCTAssertEqual(Set(loadedModels.map(\.id)), [model.id])
+        XCTAssertTrue(loadedModels.allSatisfy { $0.loadTimeSeconds != nil })
         XCTAssertEqual(loadCount, 1)
     }
 
