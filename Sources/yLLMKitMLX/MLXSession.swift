@@ -8,7 +8,7 @@ public final class MLXSession: LLMSession, @unchecked Sendable {
 
     private let container: ModelContainer
     private let baseInstructions: String?
-    private let state = CancellationState()
+    private let state = GenerationState()
 
     public init(
         id: UUID = UUID(),
@@ -27,9 +27,19 @@ public final class MLXSession: LLMSession, @unchecked Sendable {
         settings: GenerationSettings
     ) -> AsyncThrowingStream<LLMToken, Error> {
         AsyncThrowingStream { continuation in
-            state.reset()
+            guard let generationID = state.beginGeneration() else {
+                continuation.finish(
+                    throwing: LLMError.invalidRequest("Session already has an active generation.")
+                )
+                return
+            }
+
             let task = Task {
                 do {
+                    defer {
+                        state.finishGeneration(generationID)
+                    }
+
                     var index = 0
                     let request = try MLXPromptBuilder.promptRequest(from: messages)
                     var stopFilter = StopSequenceFilter(
@@ -48,7 +58,7 @@ public final class MLXSession: LLMSession, @unchecked Sendable {
                         images: [],
                         videos: []
                     ) {
-                        if state.isCancelled || Task.isCancelled {
+                        if state.isCancelled(generationID) || Task.isCancelled {
                             continuation.finish(throwing: LLMError.generationCancelled)
                             return
                         }
@@ -83,13 +93,14 @@ public final class MLXSession: LLMSession, @unchecked Sendable {
             }
 
             continuation.onTermination = { @Sendable _ in
+                self.state.cancel(generationID)
                 task.cancel()
             }
         }
     }
 
     public func cancel() {
-        state.cancel()
+        state.cancelActiveGeneration()
     }
 
     private func combinedInstructions(_ requestInstructions: String?) -> String? {
@@ -161,25 +172,52 @@ private struct StopSequenceFilter {
     }
 }
 
-private final class CancellationState: @unchecked Sendable {
+private final class GenerationState: @unchecked Sendable {
     private let lock = NSLock()
-    private var cancelled = false
+    private var activeGenerationID: UUID?
+    private var cancelledGenerationIDs: Set<UUID> = []
 
-    var isCancelled: Bool {
+    func beginGeneration() -> UUID? {
         lock.withLock {
-            cancelled
+            guard activeGenerationID == nil else {
+                return nil
+            }
+
+            let id = UUID()
+            activeGenerationID = id
+            return id
         }
     }
 
-    func cancel() {
+    func cancel(_ id: UUID) {
         lock.withLock {
-            cancelled = true
+            _ = cancelledGenerationIDs.insert(id)
         }
     }
 
-    func reset() {
+    func cancelActiveGeneration() {
         lock.withLock {
-            cancelled = false
+            if let activeGenerationID {
+                _ = cancelledGenerationIDs.insert(activeGenerationID)
+            }
+        }
+    }
+
+    func isCancelled(_ id: UUID) -> Bool {
+        lock.withLock {
+            cancelledGenerationIDs.contains(id)
+        }
+    }
+
+    func finishGeneration(_ id: UUID) {
+        lock.withLock {
+            guard activeGenerationID == id else {
+                cancelledGenerationIDs.remove(id)
+                return
+            }
+
+            activeGenerationID = nil
+            cancelledGenerationIDs.remove(id)
         }
     }
 }
