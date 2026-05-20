@@ -68,6 +68,42 @@ final class yLLMKitMLXTests: XCTestCase {
         XCTAssertTrue(modelIDs.contains("phi-3.5-moe"))
     }
 
+    func testMLXProviderReportsProviderScopedSupportedModels() async throws {
+        let provider = MLXProvider()
+
+        let models = try await provider.availableModels()
+        let modelIDs = models.map(\.id.description)
+        let phiMini = try XCTUnwrap(
+            models.first { $0.id.modelName == "phi-3.5-mini" }
+        )
+
+        XCTAssertTrue(modelIDs.contains("mlx:fast-local-assistant"))
+        XCTAssertTrue(modelIDs.contains("mlx:phi-2"))
+        XCTAssertTrue(modelIDs.contains("mlx:phi-3.5-mini"))
+        XCTAssertEqual(phiMini.id.providerID, LLMProviderID(rawValue: "mlx"))
+        XCTAssertEqual(phiMini.providerMetadata["repository"], .string("mlx-community/Phi-3.5-mini-instruct-4bit"))
+        XCTAssertTrue(phiMini.capabilities.supportsStreaming)
+        XCTAssertTrue(phiMini.capabilities.supportsLocalPreparation)
+        XCTAssertEqual(phiMini.capabilities.contextWindow, 131072)
+    }
+
+    func testMLXProviderRejectsUnknownModelWithoutLiveWork() async throws {
+        let provider = MLXProvider()
+        let missingModelID = LLMModelID(
+            providerID: LLMProviderID(rawValue: "mlx"),
+            modelName: "missing"
+        )
+
+        do {
+            try await provider.prepareModel(missingModelID)
+            XCTFail("Expected missing model preparation to throw.")
+        } catch LLMProviderError.modelNotFound(missingModelID) {
+            // Expected.
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
     func testMLXProgressUsesFractionCompleted() {
         let progress = Progress(totalUnitCount: 100)
         progress.completedUnitCount = 42
