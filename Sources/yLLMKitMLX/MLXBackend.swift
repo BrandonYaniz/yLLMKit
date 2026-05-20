@@ -41,6 +41,55 @@ public actor MLXBackend: LLMBackend {
                         )
                     )
 
+                    let downloaded = try await Self.downloadModelFiles(
+                        for: request.model,
+                        progressHandler: { progress in
+                            continuation.yield(
+                                MLXDownloadProgressMapper.downloadingProgress(
+                                    modelID: request.model.id,
+                                    progress: progress,
+                                    message: progress.localizedDescription
+                                )
+                            )
+                        }
+                    )
+                    if let localModel = downloaded.localModel {
+                        localModelsByModelID[request.model.id] = localModel
+                    }
+
+                    continuation.yield(
+                        ModelDownloadProgress(
+                            modelID: request.model.id,
+                            phase: .complete,
+                            fractionCompleted: 1.0,
+                            completedBytes: downloaded.completedBytes,
+                            totalBytes: downloaded.completedBytes,
+                            localModel: downloaded.localModel
+                        )
+                    )
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+
+            continuation.onTermination = { @Sendable _ in
+                task.cancel()
+            }
+        }
+    }
+
+    public func downloadAndWarmModel(_ request: ModelDownloadRequest) async -> AsyncThrowingStream<ModelDownloadProgress, Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    continuation.yield(
+                        ModelDownloadProgress(
+                            modelID: request.model.id,
+                            phase: .queued
+                        )
+                    )
+
                     let loaded = try await Self.loadContainer(
                         for: request.model,
                         localModel: nil
@@ -140,6 +189,32 @@ public actor MLXBackend: LLMBackend {
         }
     }
 
+    private static func downloadModelFiles(
+        for model: ModelDescriptor,
+        progressHandler: @Sendable @escaping (Progress) -> Void = { _ in }
+    ) async throws -> DownloadedMLXModel {
+        let resolved = try await resolve(
+            configuration: MLXModelConfigurationFactory.configuration(for: model),
+            from: #hubDownloader(),
+            useLatest: false,
+            progressHandler: progressHandler
+        )
+        let completedBytes = directorySize(at: resolved.modelDirectory) ?? 0
+        let localModel = LocalModel(
+            id: "local-\(model.id)",
+            modelID: model.id,
+            backendID: model.backendID,
+            path: resolved.modelDirectory.path,
+            installedAt: Date(),
+            sizeBytes: completedBytes
+        )
+
+        return DownloadedMLXModel(
+            localModel: localModel,
+            completedBytes: completedBytes
+        )
+    }
+
     private static func loadContainer(
         for model: ModelDescriptor,
         localModel: LocalModel?,
@@ -211,6 +286,11 @@ public actor MLXBackend: LLMBackend {
 
 private struct LoadedMLXContainer: Sendable {
     var container: ModelContainer
+    var localModel: LocalModel?
+    var completedBytes: Int64
+}
+
+private struct DownloadedMLXModel: Sendable {
     var localModel: LocalModel?
     var completedBytes: Int64
 }
