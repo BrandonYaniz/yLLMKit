@@ -1,60 +1,66 @@
 # Performance and Cancellation
 
-Speed and reliability are primary goals.
+Speed, predictable cancellation, and low UI coupling are primary goals.
 
 ## Metrics
 
-Every completed generation should be able to report:
+Every completed generation should be able to report provider-neutral usage and timing metadata where available.
+
+Suggested target shape:
 
 ```swift
-public struct LLMPerformanceMetrics: Codable, Sendable, Equatable {
-    public var modelID: String
-    public var promptTokenCount: Int?
+public struct LLMPerformanceMetrics: Codable, Hashable, Sendable {
+    public var modelID: LLMModelID
+    public var inputTokenCount: Int?
     public var outputTokenCount: Int?
-    public var loadTimeSeconds: Double?
+    public var preparationTimeSeconds: Double?
     public var firstTokenLatencySeconds: Double?
     public var totalGenerationSeconds: Double?
     public var tokensPerSecond: Double?
-    public var wasWarm: Bool
+    public var wasPrepared: Bool?
 }
 ```
 
+Provider products may collect additional internal metrics, but core should expose only broadly useful text/chat metrics.
+
 ## Required Measurements
 
-Benchmark harness should measure:
+Benchmark harnesses should measure:
 
-- Cold model load time.
+- Local model preparation time for providers that need preparation.
 - Warm generation time.
 - First-token latency.
 - Tokens per second.
 - Memory behavior, if accessible.
 - Cancellation behavior.
 
+Remote providers may not expose all measurements. Missing values should be optional rather than guessed.
+
 ## Cancellation Requirements
 
-Cancellation must be designed into the session layer from the start.
+Cancellation must work through Swift task cancellation first.
 
 Expected behavior:
 
-- A stream can be cancelled by cancelling the parent Swift task.
-- A session can also expose `cancel()`.
-- Cancellation should return a clean finish reason when possible.
-- Cancellation should not corrupt the loaded model state.
-- A new generation should be possible after cancellation unless the backend reports otherwise.
+- Cancelling the parent task should stop an in-flight stream.
+- Provider products may expose additional cancellation hooks internally.
+- Cancellation should finish cleanly when the provider can report it.
+- Cancellation should not corrupt local loaded model state.
+- A new generation should be possible after cancellation unless the provider reports otherwise.
 
 ## Performance Rules
 
-- Keep loaded models warm.
-- Avoid reloading per prompt.
-- Avoid `@MainActor` inside core runtime.
-- Avoid appending to a UI string on every token inside the backend.
-- Stream tokens and let the UI decide how often to render.
-- Preflight unsupported capabilities before generation.
+- Keep provider calls off the main actor unless an API specifically requires it.
+- Avoid appending to a UI string on every token inside provider code.
+- Stream text deltas and let the UI decide how often to render.
+- Preflight unsupported capabilities before generation when practical.
+- Keep local models warm after preparation when memory policy allows.
+- Do not force remote providers into local session semantics.
 
 ## App Integration Tips
 
-- Load a model before the user starts a latency-sensitive workflow.
-- Reuse a session when the user is having a continuous interaction with the same model.
+- Prepare a local model before the user starts a latency-sensitive workflow.
 - Cancel in-flight generation when the user edits the prompt or starts a new request.
-- Show download and load progress separately from generation progress.
-- Surface model size and memory requirements before download when that metadata is available.
+- Show local download, preparation, and generation progress separately.
+- Surface model size and memory requirements before local download when that metadata is available.
+- Treat remote usage and local performance metadata as optional.

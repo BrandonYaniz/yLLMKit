@@ -1,23 +1,72 @@
 # yLLMKit
 
-`yLLMKit` is a Swift package for adding local large language model support to Swift applications.
+`yLLMKit` is a Swift package for building text/chat LLM features with a small provider-neutral core and optional provider products.
 
-The goal is to make common local LLM tasks straightforward: discover supported models, check what is installed, download a selected model, load it efficiently, and stream responses back into your app.
+The package is moving from a local-only MLX runtime toward one shared chat interface that can support local and remote models without making the core target depend on any one provider.
 
 ## Status
 
-This project is in early development. The package now includes runtime-neutral core types, model manifests, a model registry, a file-backed local model store, backend/session protocols, runtime routing, download/install progress handling, streaming response aggregation, and a mock backend for integration testing.
+This project is in early development.
 
-The MLX backend is available as a separate `yLLMKitMLX` product so apps that only need the core interfaces do not need to link MLX.
+The repository currently contains the original core runtime work and the `yLLMKitMLX` local inference product. The active roadmap is refactoring that foundation toward this product shape:
+
+```text
+yLLMKit
+yLLMKitMLX
+yLLMKitOpenAI
+yLLMKitAnthropic
+yLLMKitContext
+```
+
+The v1 scope is text/chat only. Vision, audio, images, tool calling, function calling, embeddings, agents, realtime APIs, file uploads, workflow orchestration, and UI components are out of scope for v1.
+
+## Design Goals
+
+- Keep `yLLMKit` core small, UI-neutral, and provider-neutral.
+- Put MLX, OpenAI, Anthropic, GRDB, and other concrete dependencies in optional products.
+- Use provider-scoped model identifiers instead of global naked model names.
+- Stream text responses through Swift concurrency primitives.
+- Preserve app ownership of source-of-truth data.
+- Let apps choose local, remote, or deterministic-only context preparation.
+
+## Products
+
+### yLLMKit
+
+Core shared types and protocols for provider-neutral text/chat:
+
+- Provider identifiers and model identifiers.
+- Model descriptors and capabilities.
+- Chat messages, requests, responses, and stream events.
+- Generation settings.
+- Usage metadata.
+- Normalized provider errors.
+- Provider-specific options escape hatch.
+
+### yLLMKitMLX
+
+Local Apple Silicon inference through MLX. This product owns local model catalog, download, preparation, loading, streaming, cancellation, and MLX-specific mapping.
+
+### yLLMKitOpenAI
+
+Planned optional OpenAI text/chat provider. This product will own OpenAI request mapping, streaming mapping, usage mapping, configuration, and error normalization.
+
+### yLLMKitAnthropic
+
+Planned optional Anthropic text/chat provider. This product will own Anthropic request mapping, streaming mapping, usage mapping, configuration, and error normalization.
+
+### yLLMKitContext
+
+Planned optional context layer for conversation transcripts, app-supplied text sources, token-aware chunking, hierarchical summaries, source references, prompt budgeting, and GRDB-backed persistence.
 
 ## Requirements
 
 - Swift 6.2 or later.
 - macOS 14 or later.
-- Apple Silicon is recommended for local model inference.
+- Apple Silicon is recommended for local MLX inference.
 - Full Xcode is required for live MLX smoke tests because MLX needs the Metal compiler.
 
-The core package is UI-neutral. You can use it from SwiftUI, AppKit, command line tools, or other Swift application layers.
+The core package is UI-neutral. You can use it from SwiftUI, AppKit, command line tools, server-side Swift where dependencies allow, or other Swift application layers.
 
 ## Installation
 
@@ -29,7 +78,7 @@ dependencies: [
 ]
 ```
 
-Then add the library product to your target:
+Then add the core product to your target:
 
 ```swift
 .target(
@@ -40,7 +89,7 @@ Then add the library product to your target:
 )
 ```
 
-To use local MLX inference, add the MLX product as well:
+For local MLX inference, add the MLX product as well:
 
 ```swift
 .target(
@@ -52,166 +101,35 @@ To use local MLX inference, add the MLX product as well:
 )
 ```
 
-If you are using Xcode:
+## Target API Direction
 
-1. Open your app project.
-2. Select the project in the navigator.
-3. Open **Package Dependencies**.
-4. Add the repository URL for `yLLMKit`.
-5. Add the `yLLMKit` product to the app target that will use local LLM features.
-
-## Basic Usage
-
-Import the package where you need LLM runtime types:
+The public cross-provider direction is request-based text/chat:
 
 ```swift
 import yLLMKit
-```
 
-Create messages for a generation request:
-
-```swift
-let messages = [
-    LLMMessage(
-        role: .system,
-        content: "Answer clearly and concisely."
-    ),
-    LLMMessage(
-        role: .user,
-        content: "Summarize the release notes in three bullets."
-    )
-]
-```
-
-Choose generation settings:
-
-```swift
-let settings = GenerationSettings.balanced
-```
-
-Configure a session:
-
-```swift
-let configuration = SessionConfiguration(
-    systemPrompt: "You are a helpful assistant."
+let request = LLMChatRequest(
+    modelID: LLMModelID(providerID: .init(rawValue: "mlx"), modelName: "phi-3.5-mini"),
+    messages: [
+        LLMMessage(role: .system, content: "Answer clearly and concisely."),
+        LLMMessage(role: .user, content: "Summarize this note in three bullets.")
+    ],
+    settings: .balanced,
+    providerOptions: .empty
 )
 ```
 
-Create a model descriptor or load one from a manifest, then build a registry and local model store:
-
-```swift
-let model = ModelDescriptor(
-    id: "fast-local-assistant",
-    displayName: "Fast Local Assistant",
-    backendID: "mock",
-    provider: "local",
-    repository: "models/fast-local-assistant",
-    capabilities: .chatOnly(contextWindow: 4096),
-    defaultSettings: .balanced
-)
-
-let registry = try ModelRegistry(models: [model])
-let store = try FileModelStore(
-    rootDirectory: FileManager.default.urls(
-        for: .applicationSupportDirectory,
-        in: .userDomainMask
-    )[0].appendingPathComponent("yLLMKit")
-)
-
-let runtime = try LLMRuntime(
-    modelRegistry: registry,
-    modelStore: store,
-    backends: [
-        MockLLMBackend(models: [model])
-    ]
-)
-
-try await runtime.loadModel(id: model.id)
-
-let session = try await runtime.createSession(
-    modelID: model.id,
-    configuration: configuration
-)
-
-for try await token in session.streamResponse(
-    to: messages,
-    settings: settings
-) {
-    print(token.text, terminator: "")
-}
-```
-
-The mock backend is useful for validating app integration. Real local inference will come from backend implementations such as MLX.
-
-For MLX inference, import the MLX product and use the shared supported catalog:
-
-```swift
-import yLLMKit
-import yLLMKitMLX
-
-let registry = try ModelRegistry(models: SupportedModelCatalog.all)
-let store = try FileModelStore(
-    rootDirectory: modelStoreURL,
-    removalPolicy: .registeredPaths
-)
-let runtime = try LLMRuntime(
-    modelRegistry: registry,
-    modelStore: store,
-    backends: [MLXBackend()]
-)
-
-try await runtime.loadModel(id: "phi-3.5-mini")
-```
-
-## Model Workflow
-
-The planned model workflow is:
-
-1. Read a supported model manifest into `ModelRegistry`.
-2. Show supported models from `runtime.supportedModels()`.
-3. Check local install state with `runtime.isModelInstalled(_:)`.
-4. Download and register a selected model with `runtime.downloadAndInstallModel(id:)`.
-5. Load an installed model once with `runtime.loadModel(id:)`.
-6. Create a session with `runtime.createSession(modelID:configuration:)`.
-7. Stream generated tokens with `session.streamResponse(to:settings:)`.
-8. Remove models through `runtime.removeModel(id:)` when the user uninstalls them.
-9. Cancel generation cleanly when the user stops or changes a request.
-
-Model IDs should come from manifests so app code does not need to hardcode provider-specific repository names.
-
-Use `ModelDownloadProgress.fractionCompleted` for progress bars. The byte fields are optional and are only for byte labels when the backend knows the units are real bytes:
-
-```swift
-let stream = try await runtime.downloadAndInstallModel(id: "phi-2")
-for try await progress in stream {
-    if let fraction = progress.fractionCompleted {
-        percent = fraction
-    }
-
-    if let completed = progress.completedBytes, let total = progress.totalBytes {
-        byteLabel = "\(completed) / \(total) bytes"
-    }
-}
-```
-
-`FileModelStore` removes files under its own root by default. Use `removalPolicy: .registeredPaths` when you want `runtime.removeModel(id:)` to also delete backend-managed model directories registered outside the store root, such as Hugging Face cache snapshots used by MLX.
-
-## Supported Models
-
-The built-in catalog currently declares these MLX-backed chat models:
-
-- `fast-local-assistant`: `mlx-community/gemma-3-1b-it-qat-4bit`
-- `phi-2`: `mlx-community/phi-2-hf-4bit-mlx`
-- `phi-3.5-mini`: `mlx-community/Phi-3.5-mini-instruct-4bit`
-- `phi-3.5-moe`: `mlx-community/Phi-3.5-MoE-instruct-4bit`
+Provider products conform to the shared `LLMProvider` interface and stream `LLMStreamEvent` values. Existing runtime/session APIs may remain during migration, but new cross-provider work should move toward the provider-neutral request and stream shape documented in [docs/api-shape.md](docs/api-shape.md).
 
 ## Context
 
-`yLLMKit` does not require a specific data source. Your app can pass plain user messages, retrieved document snippets, search results, form data, or any other text context as `LLMMessage` values.
+`yLLMKit` does not own your app database, document store, search index, citation UI, or source-of-truth data.
 
-Keep application-specific data ownership in your app. Use `yLLMKit` for model management and generation, and let your app decide how to gather context, display citations, or apply user-approved changes.
+Apps can gather their own context and pass it as messages. Apps may also use the planned `yLLMKitContext` product to store app-supplied text, chunk long sources, maintain summaries, and build prompt-ready context packages.
 
-See [docs/context-integration.md](docs/context-integration.md) for more detail.
+If a model response proposes changing app data, treat the response as a proposal. Let the user review, accept, edit, or reject the change before your app writes anything.
+
+See [docs/context-integration.md](docs/context-integration.md).
 
 ## Documentation
 
@@ -241,13 +159,3 @@ The smoke test defaults to `phi-2`. To use another supported model:
 ```sh
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer YLLMKIT_RUN_MLX_SMOKE=1 YLLMKIT_MLX_SMOKE_MODEL=fast-local-assistant swift test --enable-xctest --disable-swift-testing --filter yLLMKitMLXTests.testLiveMLXSmokeWhenEnabled
 ```
-
-If Xcode reports that the Metal Toolchain is missing, install or export it first:
-
-```sh
-DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -downloadComponent MetalToolchain -exportPath /private/tmp/yLLMKit-MetalToolchain
-hdiutil attach /private/tmp/yLLMKit-MetalToolchain/MetalToolchain-*.exportedBundle/Restore/*.dmg -nobrowse -readonly -mountpoint /private/tmp/yLLMKit-MetalToolchainMount
-METAL_TOOLCHAIN_DIR=/private/tmp/yLLMKit-MetalToolchainMount/Metal.xctoolchain ./scripts/prepare-mlx-metallib.sh
-```
-
-Development notes used by local tooling are kept outside the public documentation path and are ignored by git.

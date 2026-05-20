@@ -3,117 +3,104 @@
 ## High-Level Pattern
 
 ```text
-App UI
+App UI or service layer
   ↓
-App-specific context gathering
+Optional app-specific retrieval
   ↓
-Context assembly
+Optional yLLMKitContext prompt preparation
   ↓
-yLLMKit runtime
+yLLMKit provider-neutral chat request
   ↓
-Backend implementation, beginning with MLX
+Concrete provider product
   ↓
-Model inference
+Local or remote model
+  ↓
+Streamed or complete text response
+```
+
+## Product Layout
+
+```text
+Sources/
+  yLLMKit/
+    Core provider-neutral text/chat interfaces
+
+  yLLMKitMLX/
+    Local MLX provider implementation
+
+  yLLMKitOpenAI/
+    OpenAI provider implementation
+
+  yLLMKitAnthropic/
+    Anthropic provider implementation
+
+  yLLMKitContext/
+    Optional context optimization, memory, chunking, summaries, and prompt budgeting
 ```
 
 ## Library Responsibility
 
-yLLMKit owns:
+### yLLMKit core owns
 
-- LLM backend protocols.
+- Provider protocols.
+- Model identifiers.
 - Model descriptors.
 - Model capabilities.
-- Download requests.
-- Download progress reporting.
-- Local model cache interface.
-- Model loading and unloading.
-- Runtime/session creation.
 - Chat messages.
+- Chat requests.
+- Chat responses.
+- Streaming events.
 - Generation settings.
-- Streaming token responses.
-- Cancellation.
-- Runtime metrics.
-- Error types.
-- Optional tool-call interface definitions.
+- Usage metadata.
+- Error normalization.
+- Provider-specific option escape hatch.
+- Mock/testing basics where lightweight.
 
-yLLMKit does not own:
+### Provider products own
 
-- App databases.
-- Document stores.
-- Search indexes.
-- Retrieval or ranking logic.
-- App-specific schemas.
-- Citation UI.
+- Provider-specific request mapping.
+- Provider-specific streaming mapping.
+- Provider-specific authentication/configuration.
+- Provider-specific model catalogs where useful.
+- Provider-specific error mapping.
+- Provider-specific dependencies.
+
+### yLLMKitContext owns
+
+- Conversation transcripts.
+- Text document sources.
+- Token-aware chunking.
+- Oversized text splitting.
+- Hierarchical summaries.
+- Conversation snapshots.
+- Context budget building.
+- Source references.
+- GRDB-backed persistence.
+- FTS search.
+- Power-aware rebuild behavior.
+
+## Core Must Not Own
+
+- MLX imports.
+- OpenAI HTTP implementation.
+- Anthropic HTTP implementation.
+- GRDB.
+- SQLite schema.
+- Context database.
+- Document parsing for PDFs, DOCX, EPUB, or web pages.
+- Vision, audio, images, tools, function calling, embeddings, agents, or realtime APIs in v1.
+- UI.
 - Direct mutation of app data.
-- App-specific prompt policies.
-
-## Recommended Repository Structure
-
-```text
-yLLMKit/
-  Package.swift
-  README.md
-  LICENSE
-  Sources/
-    yLLMKit/
-      Core/
-        LLMBackend.swift
-        LLMRuntime.swift
-        LLMSession.swift
-        LLMMessage.swift
-        LLMRequest.swift
-        LLMResponse.swift
-        LLMToken.swift
-        GenerationSettings.swift
-        SessionConfiguration.swift
-        LLMError.swift
-
-      Models/
-        ModelDescriptor.swift
-        ModelCapabilities.swift
-        ModelManifest.swift
-        ModelDownloadRequest.swift
-        ModelDownloadProgress.swift
-        LocalModel.swift
-        ModelStore.swift
-        ModelRegistry.swift
-
-      Backends/
-        MLX/
-          MLXBackend.swift
-          MLXModelLoader.swift
-          MLXModelStore.swift
-          MLXSession.swift
-          MLXModelMapping.swift
-
-      Metrics/
-        LLMPerformanceMetrics.swift
-        TokenUsage.swift
-
-      Tools/
-        LLMTool.swift
-        ToolCall.swift
-        ToolResult.swift
-        ToolRegistry.swift
-
-  Tests/
-    yLLMKitTests/
-      CoreTypeTests.swift
-      ManifestTests.swift
-      RuntimeTests.swift
-      StreamingTests.swift
-      CancellationTests.swift
-
-  Examples/
-    BasicChat/
-      README.md
-```
 
 ## Design Rules
 
-- Core runtime must be UI-neutral.
-- Core runtime must avoid `@MainActor`.
+- v1 is text/chat only.
+- Core provider layer must be UI-neutral.
+- Core provider layer must avoid `@MainActor` unless a specific API requires it.
 - Streaming should use `AsyncThrowingStream`.
-- Mutable model state should be isolated using actors or backend-specific isolation.
-- App-specific context should enter yLLMKit as messages or tool results, not as database connections.
-- Model IDs and backend details should live in manifests, not scattered throughout app code.
+- Local model lifecycle behavior should stay in local provider products or local-provider refinements.
+- Provider-specific dependencies must stay in provider products.
+- Context summaries are derived artifacts, not authoritative source records.
+- Raw transcripts and raw source text remain authoritative.
+- Apps decide whether a model response proposes, previews, or applies changes.
+- App-specific source-of-truth databases stay in the app or in purpose-built libraries such as yContinuityKit.

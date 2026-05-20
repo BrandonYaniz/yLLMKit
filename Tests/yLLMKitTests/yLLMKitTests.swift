@@ -27,6 +27,126 @@ final class yLLMKitTests: XCTestCase {
         XCTAssertEqual(GenerationSettings.balanced.topP, 0.9)
         XCTAssertEqual(GenerationSettings.precise.temperature, 0.2)
         XCTAssertEqual(GenerationSettings.precise.topP, 0.8)
+        XCTAssertNil(GenerationSettings.balanced.maxOutputTokens)
+    }
+
+    func testProviderScopedModelIDEqualityAndDescription() {
+        let mlxPhi = LLMModelID(
+            providerID: LLMProviderID(rawValue: "mlx"),
+            modelName: "phi-3.5-mini"
+        )
+        let openAIPhi = LLMModelID(
+            providerID: LLMProviderID(rawValue: "openai"),
+            modelName: "phi-3.5-mini"
+        )
+
+        XCTAssertNotEqual(mlxPhi, openAIPhi)
+        XCTAssertEqual(mlxPhi.description, "mlx:phi-3.5-mini")
+    }
+
+    func testProviderTypesCodableRoundTrip() throws {
+        let modelID = LLMModelID(
+            providerID: LLMProviderID(rawValue: "mock"),
+            modelName: "chat"
+        )
+        let request = LLMChatRequest(
+            modelID: modelID,
+            messages: [
+                LLMMessage(role: .system, content: "Be concise."),
+                LLMMessage(role: .user, content: "Hello")
+            ],
+            settings: GenerationSettings(
+                temperature: 0.1,
+                topP: 1.0,
+                maxOutputTokens: 32
+            ),
+            providerOptions: LLMProviderOptions(
+                values: [
+                    "seed": .number(42),
+                    "label": .string("test"),
+                    "enabled": .bool(true),
+                    "tags": .array([.string("a"), .string("b")]),
+                    "extra": .object(["nested": .null])
+                ]
+            )
+        )
+
+        let data = try JSONEncoder().encode(request)
+        let decoded = try JSONDecoder().decode(LLMChatRequest.self, from: data)
+        let json = try XCTUnwrap(String(data: data, encoding: .utf8))
+
+        XCTAssertEqual(decoded, request)
+        XCTAssertEqual(decoded.settings.maxTokens, 32)
+        XCTAssertEqual(decoded.providerOptions.values["label"], .string("test"))
+        XCTAssertTrue(json.contains("\"providerID\":\"mock\""))
+    }
+
+    func testModelDescriptorCarriesProviderMetadata() throws {
+        let descriptor = providerModelDescriptor(
+            providerID: "mlx",
+            modelName: "phi-3.5-mini",
+            metadata: [
+                "repository": .string("mlx-community/Phi-3.5-mini-instruct-4bit"),
+                "recommendedRAMGB": .number(8)
+            ]
+        )
+
+        let data = try JSONEncoder().encode(descriptor)
+        let decoded = try JSONDecoder().decode(LLMModelDescriptor.self, from: data)
+
+        XCTAssertEqual(decoded, descriptor)
+        XCTAssertEqual(
+            decoded.providerMetadata["repository"],
+            .string("mlx-community/Phi-3.5-mini-instruct-4bit")
+        )
+    }
+
+    func testMockProviderStreamsCompletionWithUsage() async throws {
+        let model = providerModelDescriptor(providerID: "mock", modelName: "chat")
+        let provider = MockLLMProvider(models: [model], responseText: "mock response")
+        let request = LLMChatRequest(
+            modelID: model.id,
+            messages: [LLMMessage(role: .user, content: "Hello")]
+        )
+
+        try await provider.prepareModel(model.id)
+
+        var events: [LLMStreamEvent] = []
+        for try await event in provider.streamChat(request: request) {
+            events.append(event)
+        }
+
+        XCTAssertEqual(events.first, .started(LLMStreamStart(modelID: model.id)))
+        XCTAssertEqual(events.dropFirst().first, .textDelta("mock"))
+        XCTAssertEqual(events.dropFirst(2).first, .textDelta(" response"))
+
+        guard case .completed(let response) = events.last else {
+            return XCTFail("Expected completed event.")
+        }
+
+        XCTAssertEqual(response.modelID, model.id)
+        XCTAssertEqual(response.message.role, .assistant)
+        XCTAssertEqual(response.message.content, "mock response")
+        XCTAssertEqual(response.usage?.outputTokens, 2)
+        XCTAssertEqual(response.finishReason, .stop)
+    }
+
+    func testMockProviderFailsMissingModel() async throws {
+        let model = providerModelDescriptor(providerID: "mock", modelName: "chat")
+        let missingModelID = LLMModelID(
+            providerID: LLMProviderID(rawValue: "mock"),
+            modelName: "missing"
+        )
+        let provider = MockLLMProvider(models: [model])
+
+        do {
+            try await provider.prepareModel(missingModelID)
+            XCTFail("Expected missing model preparation to throw.")
+        } catch LLMProviderError.modelNotFound(missingModelID) {
+            // Expected.
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
     }
 
     func testCodableRoundTrip() throws {
@@ -613,6 +733,28 @@ final class yLLMKitTests: XCTestCase {
             repository: "models/\(id)",
             capabilities: .chatOnly(contextWindow: 4096),
             defaultSettings: .balanced
+        )
+    }
+
+    private func providerModelDescriptor(
+        providerID: String,
+        modelName: String,
+        metadata: [String: JSONValue] = [:]
+    ) -> LLMModelDescriptor {
+        LLMModelDescriptor(
+            id: LLMModelID(
+                providerID: LLMProviderID(rawValue: providerID),
+                modelName: modelName
+            ),
+            displayName: "Chat Model",
+            capabilities: LLMModelCapabilities(
+                supportsStreaming: true,
+                supportsLocalPreparation: providerID == "mlx",
+                contextWindow: 4096,
+                maxOutputTokens: 1024
+            ),
+            defaultSettings: .balanced,
+            providerMetadata: metadata
         )
     }
 

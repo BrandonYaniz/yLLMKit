@@ -1,5 +1,7 @@
-public struct LLMMessage: Codable, Sendable, Equatable {
-    public enum Role: String, Codable, Sendable, Equatable {
+public typealias LLMRole = LLMMessage.Role
+
+public struct LLMMessage: Codable, Sendable, Hashable {
+    public enum Role: String, Codable, Sendable, Hashable {
         case system
         case user
         case assistant

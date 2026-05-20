@@ -1,152 +1,236 @@
 # yLLMKit API Shape
 
-## LLMBackend
+This document describes the target v1 API shape.
+
+v1 is text/chat only.
+
+## Provider
 
 ```swift
-public protocol LLMBackend: Sendable {
-    var id: String { get }
-    var name: String { get }
+public protocol LLMProvider: Sendable {
+    var providerID: LLMProviderID { get }
 
-    func availableModels() async throws -> [ModelDescriptor]
-    func localModels() async throws -> [LocalModel]
-    func downloadModel(_ model: ModelDescriptor) -> AsyncThrowingStream<ModelDownloadProgress, Error>
-    func loadModel(_ model: ModelDescriptor) async throws -> LoadedModel
-    func unloadModel(_ modelID: String) async throws
-    func createSession(modelID: String, configuration: SessionConfiguration) async throws -> any LLMSession
+    func availableModels() async throws -> [LLMModelDescriptor]
+
+    func prepareModel(
+        _ modelID: LLMModelID
+    ) async throws
+
+    func streamChat(
+        request: LLMChatRequest
+    ) -> AsyncThrowingStream<LLMStreamEvent, Error>
 }
 ```
 
-## LLMSession
+`prepareModel` means "make this model ready enough for a chat request."
+
+For local providers, preparation may validate install state, download, load, or warm a model depending on provider policy. For remote providers, preparation may validate configuration or be a no-op.
+
+If local lifecycle behavior needs richer progress, keep that behavior in the local provider product or a local-model protocol refinement rather than adding MLX-specific lifecycle requirements to core.
+
+## Model IDs
 
 ```swift
-public protocol LLMSession: Sendable {
-    var id: UUID { get }
-    var model: ModelDescriptor { get }
+public struct LLMProviderID: Codable, Hashable, Sendable, RawRepresentable {
+    public var rawValue: String
 
-    func respond(
-        to messages: [LLMMessage],
-        settings: GenerationSettings
-    ) async throws -> LLMResponse
+    public init(rawValue: String)
+}
 
-    func streamResponse(
-        to messages: [LLMMessage],
-        settings: GenerationSettings
-    ) -> AsyncThrowingStream<LLMToken, Error>
+public struct LLMModelID: Codable, Hashable, Sendable {
+    public var providerID: LLMProviderID
+    public var modelName: String
 
-    func cancel()
+    public init(providerID: LLMProviderID, modelName: String)
 }
 ```
 
-## LLMMessage
+`LLMProviderID` should encode as its raw string value.
+
+`LLMModelID` values should be displayed as provider-scoped identifiers such as `mlx:phi-3.5-mini`, `openai:gpt-...`, or `anthropic:claude-...`.
+
+## Model Descriptor
 
 ```swift
-public struct LLMMessage: Codable, Sendable, Equatable {
-    public enum Role: String, Codable, Sendable {
-        case system
-        case user
-        case assistant
-        case tool
-    }
+public struct LLMModelDescriptor: Codable, Hashable, Sendable, Identifiable {
+    public var id: LLMModelID
+    public var displayName: String
+    public var capabilities: LLMModelCapabilities
+    public var defaultSettings: GenerationSettings?
+    public var providerMetadata: [String: JSONValue]
+}
+```
 
-    public var role: Role
+`providerMetadata` is for provider-owned catalog data such as repository names, revisions, recommended memory, or vendor labels. Core should preserve it but avoid interpreting provider-specific keys.
+
+## Capabilities
+
+```swift
+public struct LLMModelCapabilities: Codable, Hashable, Sendable {
+    public var supportsStreaming: Bool
+    public var supportsLocalPreparation: Bool
+    public var contextWindow: Int?
+    public var maxOutputTokens: Int?
+}
+```
+
+Do not add vision, tool, embedding, or multimodal capabilities in v1.
+
+## Message
+
+```swift
+public struct LLMMessage: Codable, Hashable, Sendable {
+    public var role: LLMRole
     public var content: String
     public var metadata: [String: String]
+
+    public init(role: LLMRole, content: String, metadata: [String: String] = [:])
 }
 ```
 
-## GenerationSettings
+```swift
+public enum LLMRole: String, Codable, Hashable, Sendable {
+    case system
+    case user
+    case assistant
+}
+```
+
+No tool role in v1.
+
+## Chat Request
 
 ```swift
-public struct GenerationSettings: Codable, Sendable, Equatable {
-    public var temperature: Double
-    public var topP: Double
-    public var maxTokens: Int?
-    public var repetitionPenalty: Double?
+public struct LLMChatRequest: Sendable {
+    public var modelID: LLMModelID
+    public var messages: [LLMMessage]
+    public var settings: GenerationSettings
+    public var providerOptions: LLMProviderOptions
+
+    public init(
+        modelID: LLMModelID,
+        messages: [LLMMessage],
+        settings: GenerationSettings = .balanced,
+        providerOptions: LLMProviderOptions = .empty
+    )
+}
+```
+
+## Chat Response
+
+```swift
+public struct LLMChatResponse: Sendable {
+    public var modelID: LLMModelID
+    public var message: LLMMessage
+    public var usage: LLMUsage?
+    public var finishReason: LLMFinishReason?
+    public var providerMetadata: [String: String]
+}
+```
+
+## Stream Events
+
+```swift
+public enum LLMStreamEvent: Sendable {
+    case started(LLMStreamStart)
+    case textDelta(String)
+    case completed(LLMChatResponse)
+}
+```
+
+Use stream failure for errors.
+
+```swift
+public struct LLMStreamStart: Codable, Hashable, Sendable {
+    public var modelID: LLMModelID
+    public var providerMetadata: [String: String]
+}
+```
+
+```swift
+public enum LLMFinishReason: String, Codable, Hashable, Sendable {
+    case stop
+    case length
+    case cancelled
+    case providerSpecific
+}
+```
+
+## Generation Settings
+
+```swift
+public struct GenerationSettings: Codable, Hashable, Sendable {
+    public var temperature: Double?
+    public var topP: Double?
+    public var maxOutputTokens: Int?
     public var stopSequences: [String]
 
-    public static let balanced = GenerationSettings(
-        temperature: 0.7,
-        topP: 0.9,
-        maxTokens: nil,
-        repetitionPenalty: nil,
-        stopSequences: []
-    )
-
-    public static let precise = GenerationSettings(
-        temperature: 0.2,
-        topP: 0.8,
-        maxTokens: nil,
-        repetitionPenalty: nil,
-        stopSequences: []
-    )
+    public static let balanced: GenerationSettings
+    public static let precise: GenerationSettings
 }
 ```
 
-## ModelDescriptor
+Keep provider-specific settings out of the common type unless they are broadly supported.
+
+## Provider Options
 
 ```swift
-public struct ModelDescriptor: Codable, Sendable, Identifiable, Equatable {
-    public var id: String
-    public var displayName: String
-    public var backendID: String
-    public var provider: String
-    public var repository: String
-    public var revision: String?
-    public var capabilities: ModelCapabilities
-    public var recommendedRAMGB: Int?
-    public var defaultSettings: GenerationSettings
+public struct LLMProviderOptions: Codable, Hashable, Sendable {
+    public var values: [String: JSONValue]
+
+    public static let empty: LLMProviderOptions
+
+    public init(values: [String: JSONValue] = [:])
 }
 ```
 
-## ModelDownloadProgress
+This is the escape hatch for provider-specific options.
 
 ```swift
-public struct ModelDownloadProgress: Codable, Sendable, Equatable {
-    public var modelID: String
-    public var phase: Phase
-    public var fractionCompleted: Double?
-    public var completedBytes: Int64?
-    public var totalBytes: Int64?
-    public var message: String?
-    public var localModel: LocalModel?
+public enum JSONValue: Codable, Hashable, Sendable {
+    case string(String)
+    case number(Double)
+    case bool(Bool)
+    case object([String: JSONValue])
+    case array([JSONValue])
+    case null
 }
 ```
 
-Use `fractionCompleted` for percent UI. `completedBytes` and `totalBytes` are optional because some backends report file counts or synthetic work units instead of bytes.
-
-## ModelCapabilities
+## Usage
 
 ```swift
-public struct ModelCapabilities: Codable, Sendable, Equatable {
-    public var supportsChat: Bool
-    public var supportsCompletion: Bool
-    public var supportsVision: Bool
-    public var supportsEmbeddings: Bool
-    public var supportsToolCalling: Bool
-    public var supportsJSONMode: Bool
-    public var contextWindow: Int
-    public var preferredMaxOutputTokens: Int?
+public struct LLMUsage: Codable, Hashable, Sendable {
+    public var inputTokens: Int?
+    public var outputTokens: Int?
+    public var totalTokens: Int?
 }
 ```
 
-## Runtime Usage Goal
+Token usage is optional because providers report usage differently.
+
+## Error Shape
 
 ```swift
-let runtime = LLMRuntime(backends: [MLXBackend()])
-
-let model = try await runtime.modelRegistry.model(id: "fast-local-assistant")
-try await runtime.loadModel(model)
-
-let session = try await runtime.createSession(
-    modelID: model.id,
-    configuration: SessionConfiguration(systemPrompt: "Use supplied source data carefully.")
-)
-
-let messages: [LLMMessage] = [
-    .init(role: .user, content: "Summarize this context.", metadata: [:])
-]
-
-for try await token in session.streamResponse(to: messages, settings: .balanced) {
-    print(token.text, terminator: "")
+public enum LLMProviderError: Error, Sendable {
+    case modelNotFound(LLMModelID)
+    case modelNotPrepared(LLMModelID)
+    case unsupportedCapability(String)
+    case invalidRequest(String)
+    case authenticationFailed(String)
+    case rateLimited(String)
+    case transportFailed(String)
+    case providerFailed(String)
+    case cancelled
 }
 ```
+
+## Compatibility with Existing Runtime Types
+
+Existing `LLMRuntime`, `LLMBackend`, and `LLMSession` concepts may remain temporarily while migration is underway.
+
+The cross-provider public direction should move toward provider-neutral request/stream APIs.
+
+Do not break working MLX behavior without replacing it with tested provider-equivalent behavior.
+
+Legacy manifest and runtime types should be treated as migration inputs, not the destination API shape.
