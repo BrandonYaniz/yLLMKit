@@ -31,6 +31,7 @@ let package = Package(
         )
     ],
     dependencies: [
+        .package(url: "https://github.com/groue/GRDB.swift.git", .upToNextMajor(from: "7.10.0")),
         .package(url: "https://github.com/ml-explore/mlx-swift-lm", .upToNextMajor(from: "3.31.3")),
         .package(url: "https://github.com/huggingface/swift-huggingface", from: "0.9.0"),
         .package(url: "https://github.com/huggingface/swift-transformers", from: "1.3.0")
@@ -60,7 +61,10 @@ let package = Package(
         ),
         .target(
             name: "yLLMKitContext",
-            dependencies: ["yLLMKit"]
+            dependencies: [
+                "yLLMKit",
+                .product(name: "GRDB", package: "GRDB.swift")
+            ]
         ),
         .testTarget(
             name: "yLLMKitTests",
