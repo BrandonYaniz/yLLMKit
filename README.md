@@ -117,9 +117,20 @@ For local MLX inference, add the MLX product as well:
 )
 ```
 
-## Target API Direction
+Add only the provider products your target actually needs:
 
-The public cross-provider direction is request-based text/chat:
+```swift
+.product(name: "yLLMKitMLX", package: "yLLMKit")
+.product(name: "yLLMKitOpenAI", package: "yLLMKit")
+.product(name: "yLLMKitAnthropic", package: "yLLMKit")
+.product(name: "yLLMKitContext", package: "yLLMKit")
+```
+
+Keeping provider products opt-in keeps simple targets small. A target that only models requests can depend on `yLLMKit`; a target that runs local inference can add `yLLMKitMLX`; a target that prepares context can add `yLLMKitContext`; and a target that talks to hosted models can add the remote provider product it uses.
+
+## Quick Start
+
+Build a chat request with provider-scoped model identifiers, then pass it to any product that conforms to `LLMProvider`:
 
 ```swift
 import yLLMKit
@@ -135,7 +146,28 @@ let request = LLMChatRequest(
 )
 ```
 
-Provider products conform to the shared `LLMProvider` interface and stream `LLMStreamEvent` values. Existing runtime/session APIs may remain during migration, but new cross-provider work should move toward the provider-neutral request and stream shape documented in [docs/api-shape.md](docs/api-shape.md).
+Provider products stream `LLMStreamEvent` values through Swift concurrency:
+
+```swift
+let provider: any LLMProvider = /* MLXProvider, OpenAIProvider, or AnthropicProvider */
+
+try await provider.prepareModel(request.modelID)
+
+for try await event in provider.streamChat(request: request) {
+    switch event {
+    case .started:
+        break
+    case .textDelta(let text):
+        print(text, terminator: "")
+    case .completed(let response):
+        print("\nFinished:", response.finishReason ?? .stop)
+    }
+}
+```
+
+The app owns where messages come from and where responses go. `yLLMKit` provides the shared chat shape, provider products handle model-specific execution, and `yLLMKitContext` can help turn app-owned source material into prompt-ready messages when the conversation needs more than the latest user input.
+
+Existing runtime/session APIs may remain during migration, but new cross-provider work should move toward the provider-neutral request and stream shape documented in [docs/api-shape.md](docs/api-shape.md).
 
 ## Context
 
