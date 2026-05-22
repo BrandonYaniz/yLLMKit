@@ -31,14 +31,16 @@ final class GRDBContextStoreTests: XCTestCase {
             turnIndex: 0,
             role: .user,
             content: "Hello",
-            tokenEstimate: 1
+            tokenEstimate: 1,
+            createdAt: Date(timeIntervalSince1970: 1)
         )
         let second = ConversationTurn(
             sourceID: source.id,
             turnIndex: 1,
             role: .assistant,
             content: "Hi",
-            tokenEstimate: 1
+            tokenEstimate: 1,
+            createdAt: Date(timeIntervalSince1970: 2)
         )
 
         try await store.appendTurn(second)
@@ -64,7 +66,9 @@ final class GRDBContextStoreTests: XCTestCase {
             text: "Alpha beta context.",
             tokenEstimate: 3,
             sourceReferences: [reference],
-            contentHash: "chunk-hash"
+            contentHash: "chunk-hash",
+            createdAt: Date(timeIntervalSince1970: 1),
+            updatedAt: Date(timeIntervalSince1970: 1)
         )
 
         try await store.saveChunk(chunk)
