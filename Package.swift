@@ -24,6 +24,10 @@ let package = Package(
         .library(
             name: "yLLMKitAnthropic",
             targets: ["yLLMKitAnthropic"]
+        ),
+        .library(
+            name: "yLLMKitContext",
+            targets: ["yLLMKitContext"]
         )
     ],
     dependencies: [
@@ -54,6 +58,10 @@ let package = Package(
             name: "yLLMKitAnthropic",
             dependencies: ["yLLMKit"]
         ),
+        .target(
+            name: "yLLMKitContext",
+            dependencies: ["yLLMKit"]
+        ),
         .testTarget(
             name: "yLLMKitTests",
             dependencies: ["yLLMKit"]
@@ -77,6 +85,13 @@ let package = Package(
             dependencies: [
                 "yLLMKit",
                 "yLLMKitAnthropic"
+            ]
+        ),
+        .testTarget(
+            name: "yLLMKitContextTests",
+            dependencies: [
+                "yLLMKit",
+                "yLLMKitContext"
             ]
         )
     ]
