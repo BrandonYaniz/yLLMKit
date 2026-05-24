@@ -146,11 +146,38 @@ let request = LLMChatRequest(
 )
 ```
 
+Create the provider in the product that owns the concrete model backend:
+
+```swift
+import yLLMKit
+import yLLMKitMLX
+
+let provider: any LLMProvider = MLXProvider()
+```
+
+For hosted models, configure the matching remote provider product and keep API keys in your app's own secure configuration:
+
+```swift
+import yLLMKit
+import yLLMKitOpenAI
+
+let provider: any LLMProvider = OpenAIProvider(
+    configuration: OpenAIProviderConfiguration(apiKey: openAIAPIKey)
+)
+```
+
+```swift
+import yLLMKit
+import yLLMKitAnthropic
+
+let provider: any LLMProvider = AnthropicProvider(
+    configuration: AnthropicProviderConfiguration(apiKey: anthropicAPIKey)
+)
+```
+
 Provider products stream `LLMStreamEvent` values through Swift concurrency:
 
 ```swift
-let provider: any LLMProvider = /* MLXProvider, OpenAIProvider, or AnthropicProvider */
-
 try await provider.prepareModel(request.modelID)
 
 for try await event in provider.streamChat(request: request) {
