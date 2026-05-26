@@ -49,8 +49,6 @@ enum MLXPromptBuilder {
             return .user
         case .assistant:
             return .assistant
-        case .tool:
-            return .tool
         }
     }
 }

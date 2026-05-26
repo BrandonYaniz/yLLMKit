@@ -67,7 +67,7 @@ struct AnthropicMessage: Encodable {
         switch message.role {
         case .assistant:
             self.role = "assistant"
-        case .system, .user, .tool:
+        case .system, .user:
             self.role = "user"
         }
         self.content = message.content

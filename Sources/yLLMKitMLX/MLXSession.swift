@@ -226,9 +226,8 @@ private extension GenerateParameters {
     init(settings: GenerationSettings) {
         self.init(
             maxTokens: settings.maxTokens,
-            temperature: Float(settings.temperature),
-            topP: Float(settings.topP),
-            repetitionPenalty: settings.repetitionPenalty.map(Float.init)
+            temperature: Float(settings.temperature ?? 0.7),
+            topP: Float(settings.topP ?? 0.9)
         )
     }
 }

@@ -5,7 +5,6 @@ public struct LLMMessage: Codable, Sendable, Hashable {
         case system
         case user
         case assistant
-        case tool
     }
 
     public var role: Role

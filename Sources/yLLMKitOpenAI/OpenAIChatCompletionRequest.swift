@@ -65,8 +65,6 @@ struct OpenAIChatMessage: Encodable {
             self.role = "user"
         case .assistant:
             self.role = "assistant"
-        case .tool:
-            self.role = "user"
         }
         self.content = message.content
     }

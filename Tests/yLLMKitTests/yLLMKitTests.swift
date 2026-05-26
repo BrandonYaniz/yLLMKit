@@ -30,6 +30,27 @@ final class yLLMKitTests: XCTestCase {
         XCTAssertNil(GenerationSettings.balanced.maxOutputTokens)
     }
 
+    func testGenerationSettingsAllowProviderDefaults() throws {
+        let settings = GenerationSettings(maxOutputTokens: 128)
+
+        XCTAssertNil(settings.temperature)
+        XCTAssertNil(settings.topP)
+        XCTAssertEqual(settings.maxOutputTokens, 128)
+        XCTAssertTrue(settings.stopSequences.isEmpty)
+
+        let data = try JSONEncoder().encode(settings)
+        let decoded = try JSONDecoder().decode(GenerationSettings.self, from: data)
+
+        XCTAssertEqual(decoded, settings)
+    }
+
+    func testV1MessageRolesAreTextChatOnly() {
+        XCTAssertEqual(LLMRole.system.rawValue, "system")
+        XCTAssertEqual(LLMRole.user.rawValue, "user")
+        XCTAssertEqual(LLMRole.assistant.rawValue, "assistant")
+        XCTAssertNil(LLMRole(rawValue: "tool"))
+    }
+
     func testProviderScopedModelIDEqualityAndDescription() {
         let mlxPhi = LLMModelID(
             providerID: LLMProviderID(rawValue: "mlx"),

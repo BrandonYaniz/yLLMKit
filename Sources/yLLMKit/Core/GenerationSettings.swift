@@ -1,8 +1,7 @@
 public struct GenerationSettings: Codable, Sendable, Hashable {
-    public var temperature: Double
-    public var topP: Double
+    public var temperature: Double?
+    public var topP: Double?
     public var maxTokens: Int?
-    public var repetitionPenalty: Double?
     public var stopSequences: [String]
 
     public var maxOutputTokens: Int? {
@@ -11,22 +10,20 @@ public struct GenerationSettings: Codable, Sendable, Hashable {
     }
 
     public init(
-        temperature: Double,
-        topP: Double,
+        temperature: Double? = nil,
+        topP: Double? = nil,
         maxTokens: Int? = nil,
-        repetitionPenalty: Double? = nil,
         stopSequences: [String] = []
     ) {
         self.temperature = temperature
         self.topP = topP
         self.maxTokens = maxTokens
-        self.repetitionPenalty = repetitionPenalty
         self.stopSequences = stopSequences
     }
 
     public init(
-        temperature: Double,
-        topP: Double,
+        temperature: Double? = nil,
+        topP: Double? = nil,
         maxOutputTokens: Int?,
         stopSequences: [String] = []
     ) {
@@ -34,7 +31,6 @@ public struct GenerationSettings: Codable, Sendable, Hashable {
             temperature: temperature,
             topP: topP,
             maxTokens: maxOutputTokens,
-            repetitionPenalty: nil,
             stopSequences: stopSequences
         )
     }
@@ -43,7 +39,6 @@ public struct GenerationSettings: Codable, Sendable, Hashable {
         temperature: 0.7,
         topP: 0.9,
         maxTokens: nil,
-        repetitionPenalty: nil,
         stopSequences: []
     )
 
@@ -51,7 +46,6 @@ public struct GenerationSettings: Codable, Sendable, Hashable {
         temperature: 0.2,
         topP: 0.8,
         maxTokens: nil,
-        repetitionPenalty: nil,
         stopSequences: []
     )
 }
