@@ -196,6 +196,31 @@ The app owns where messages come from and where responses go. `yLLMKit` provides
 
 Existing runtime/session APIs may remain during migration, but new cross-provider work should move toward the provider-neutral request and stream shape documented in [docs/api-shape.md](docs/api-shape.md).
 
+## Model Selection
+
+Models are identified by both provider and model name. This avoids collisions when different providers use the same public model name and gives app code a stable value to store, compare, and display:
+
+```swift
+let localModelID = LLMModelID(
+    providerID: LLMProviderID(rawValue: "mlx"),
+    modelName: "phi-3.5-mini"
+)
+
+print(localModelID.description) // mlx:phi-3.5-mini
+```
+
+Use `availableModels()` when a provider can expose a catalog. Each `LLMModelDescriptor` includes a display name, conservative text/chat capabilities, optional default settings, and provider-owned metadata such as a local repository name or hosted vendor label:
+
+```swift
+let models = try await provider.availableModels()
+
+for model in models {
+    print(model.displayName, model.id.description)
+}
+```
+
+The core package preserves provider metadata but does not interpret provider-specific keys. See [docs/model-manifest.md](docs/model-manifest.md) for the manifest shape and migration notes.
+
 ## Context
 
 `yLLMKit` does not own your app database, document store, search index, citation UI, or source-of-truth data.
