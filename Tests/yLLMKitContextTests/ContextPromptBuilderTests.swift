@@ -133,6 +133,57 @@ final class ContextPromptBuilderTests: XCTestCase {
         XCTAssertEqual(prepared.includedReferences.map(\.targetID), [turns[2].id, turns[1].id])
         XCTAssertEqual(prepared.omittedReferences.map(\.targetID), [turns[0].id])
     }
+
+    func testBuilderReservesBudgetForFinalUserMessageBeforeOptionalContext() {
+        let sourceID = UUID()
+        let chunkReference = ContextSourceReference(
+            sourceID: sourceID,
+            kind: .span,
+            targetID: UUID(),
+            label: "Optional"
+        )
+        let request = ContextPromptBuildRequest(
+            retrievedChunks: [
+                ContextChunk(
+                    sourceID: sourceID,
+                    level: 0,
+                    kind: .raw,
+                    text: "optional context",
+                    tokenEstimate: 2,
+                    sourceReferences: [chunkReference]
+                )
+            ],
+            finalUserMessage: "must fit",
+            budget: ContextBudget(maximumInputTokens: 3, reservedOutputTokens: 0)
+        )
+        let builder = ContextPromptBuilder(tokenEstimator: PromptWordCountTokenEstimator())
+
+        let prepared = builder.build(request)
+
+        XCTAssertEqual(prepared.messages.map(\.content), ["must fit"])
+        XCTAssertEqual(prepared.messages.map(\.role), [.user])
+        XCTAssertEqual(prepared.estimatedInputTokens, 2)
+        XCTAssertEqual(prepared.omittedReferences, [chunkReference])
+        XCTAssertEqual(prepared.warnings.map(\.kind), [.tokenBudgetExceeded])
+    }
+
+    func testBuilderWarnsWhenFinalUserMessageCannotFitInputBudget() {
+        let request = ContextPromptBuildRequest(
+            finalUserMessage: "too many words",
+            budget: ContextBudget(maximumInputTokens: 2, reservedOutputTokens: 0)
+        )
+        let builder = ContextPromptBuilder(tokenEstimator: PromptWordCountTokenEstimator())
+
+        let prepared = builder.build(request)
+
+        XCTAssertTrue(prepared.messages.isEmpty)
+        XCTAssertEqual(prepared.estimatedInputTokens, 0)
+        XCTAssertEqual(prepared.warnings.map(\.kind), [.tokenBudgetExceeded])
+        XCTAssertEqual(
+            prepared.warnings.first?.message,
+            "Final user message exceeded the available input budget."
+        )
+    }
 }
 
 private struct PromptWordCountTokenEstimator: ContextTokenEstimator {

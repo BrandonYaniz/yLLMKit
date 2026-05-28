@@ -39,6 +39,10 @@ public struct ContextPromptBuilder<Estimator: ContextTokenEstimator>: Sendable {
     public func build(_ request: ContextPromptBuildRequest) -> PreparedContext {
         var state = BuildState(remainingTokens: request.budget.availableInputTokens)
         var messages: [LLMMessage] = []
+        let reservedFinalUserMessage = reserveFinalUserMessage(
+            nonEmpty(request.finalUserMessage),
+            state: &state
+        )
 
         if let systemPrompt = nonEmpty(request.systemPrompt) {
             appendSystemPrompt(
@@ -72,8 +76,8 @@ public struct ContextPromptBuilder<Estimator: ContextTokenEstimator>: Sendable {
             messages: &messages
         )
 
-        if let finalUserMessage = nonEmpty(request.finalUserMessage) {
-            appendFinalUserMessage(finalUserMessage, state: &state, messages: &messages)
+        if let reservedFinalUserMessage {
+            appendReservedFinalUserMessage(reservedFinalUserMessage, messages: &messages)
         }
 
         var metadata = request.metadata
@@ -87,6 +91,29 @@ public struct ContextPromptBuilder<Estimator: ContextTokenEstimator>: Sendable {
             warnings: state.warnings,
             metadata: metadata
         )
+    }
+
+    private func reserveFinalUserMessage(
+        _ message: String?,
+        state: inout BuildState
+    ) -> ReservedFinalUserMessage? {
+        guard let message else {
+            return nil
+        }
+
+        let tokenEstimate = estimate(message)
+        guard tokenEstimate <= state.remainingTokens else {
+            state.warnings.append(
+                ContextBuildWarning(
+                    kind: .tokenBudgetExceeded,
+                    message: "Final user message exceeded the available input budget."
+                )
+            )
+            return nil
+        }
+
+        state.remainingTokens -= tokenEstimate
+        return ReservedFinalUserMessage(content: message)
     }
 
     private func appendSystemPrompt(
@@ -187,24 +214,11 @@ public struct ContextPromptBuilder<Estimator: ContextTokenEstimator>: Sendable {
         )
     }
 
-    private func appendFinalUserMessage(
-        _ message: String,
-        state: inout BuildState,
+    private func appendReservedFinalUserMessage(
+        _ message: ReservedFinalUserMessage,
         messages: inout [LLMMessage]
     ) {
-        let tokenEstimate = estimate(message)
-        guard tokenEstimate <= state.remainingTokens else {
-            state.warnings.append(
-                ContextBuildWarning(
-                    kind: .tokenBudgetExceeded,
-                    message: "Final user message exceeded the remaining input budget."
-                )
-            )
-            return
-        }
-
-        messages.append(LLMMessage(role: .user, content: message))
-        state.remainingTokens -= tokenEstimate
+        messages.append(LLMMessage(role: .user, content: message.content))
     }
 
     private func fits(_ tokenEstimate: Int, sectionBudget: Int?, state: BuildState) -> Bool {
@@ -246,6 +260,10 @@ public extension ContextPromptBuilder where Estimator == ApproximateContextToken
     init(tokenEstimator: ApproximateContextTokenEstimator = ApproximateContextTokenEstimator()) {
         self.tokenEstimator = tokenEstimator
     }
+}
+
+private struct ReservedFinalUserMessage {
+    var content: String
 }
 
 private struct BuildState {
