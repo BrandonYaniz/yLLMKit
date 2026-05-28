@@ -85,6 +85,8 @@ public final class AnthropicProvider: LLMProvider, @unchecked Sendable {
                     continuation.finish(throwing: error)
                 } catch let error as AnthropicHTTPError {
                     continuation.finish(throwing: Self.providerError(for: error.statusCode))
+                } catch is CancellationError {
+                    continuation.finish(throwing: LLMProviderError.cancelled)
                 } catch {
                     continuation.finish(throwing: LLMProviderError.providerFailed(String(describing: error)))
                 }
@@ -122,7 +124,7 @@ public final class AnthropicProvider: LLMProvider, @unchecked Sendable {
             output += text
             continuation.yield(.textDelta(text))
         case .usage(let value):
-            usage = value
+            usage = usage.merging(value)
         case .finishReason(let value):
             finishReason = value
         case .done:
@@ -141,5 +143,28 @@ public final class AnthropicProvider: LLMProvider, @unchecked Sendable {
         default:
             .transportFailed("Anthropic request failed with HTTP \(statusCode).")
         }
+    }
+}
+
+private extension Optional where Wrapped == LLMUsage {
+    func merging(_ next: LLMUsage) -> LLMUsage {
+        guard let current = self else {
+            return next
+        }
+
+        let inputTokens = next.inputTokens ?? current.inputTokens
+        let outputTokens = next.outputTokens ?? current.outputTokens
+        let totalTokens = next.totalTokens ?? current.totalTokens ?? {
+            guard let inputTokens, let outputTokens else {
+                return nil
+            }
+            return inputTokens + outputTokens
+        }()
+
+        return LLMUsage(
+            inputTokens: inputTokens,
+            outputTokens: outputTokens,
+            totalTokens: totalTokens
+        )
     }
 }

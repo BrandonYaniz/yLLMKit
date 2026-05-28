@@ -109,7 +109,9 @@ final class yLLMKitAnthropicTests: XCTestCase {
         }
 
         XCTAssertEqual(response.message.content, "Hello")
+        XCTAssertEqual(response.usage?.inputTokens, 4)
         XCTAssertEqual(response.usage?.outputTokens, 2)
+        XCTAssertEqual(response.usage?.totalTokens, 6)
         XCTAssertEqual(response.finishReason, .stop)
         XCTAssertEqual(transport.capturedRequests.count, 1)
     }
@@ -134,6 +136,31 @@ final class yLLMKitAnthropicTests: XCTestCase {
             XCTFail("Expected stream to fail.")
         } catch LLMProviderError.rateLimited(let message) {
             XCTAssertTrue(message.contains("429"))
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
+    func testAnthropicProviderMapsCancellation() async throws {
+        let model = anthropicModel("claude-test")
+        let provider = AnthropicProvider(
+            configuration: AnthropicProviderConfiguration(
+                apiKey: "test-key",
+                models: [model]
+            ),
+            transport: MockAnthropicTransport(error: CancellationError())
+        )
+
+        do {
+            for try await _ in provider.streamChat(
+                request: LLMChatRequest(
+                    modelID: model.id,
+                    messages: [LLMMessage(role: .user, content: "Hello")]
+                )
+            ) {}
+            XCTFail("Expected stream to fail.")
+        } catch LLMProviderError.cancelled {
+            // Expected.
         } catch {
             XCTFail("Unexpected error: \(error)")
         }

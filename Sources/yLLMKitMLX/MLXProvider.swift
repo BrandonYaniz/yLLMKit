@@ -70,8 +70,12 @@ public final class MLXProvider: LLMProvider, @unchecked Sendable {
                     continuation.finish()
                 } catch LLMError.modelNotLoaded {
                     continuation.finish(throwing: LLMProviderError.modelNotPrepared(request.modelID))
+                } catch LLMError.generationCancelled {
+                    continuation.finish(throwing: LLMProviderError.cancelled)
                 } catch let error as LLMProviderError {
                     continuation.finish(throwing: error)
+                } catch is CancellationError {
+                    continuation.finish(throwing: LLMProviderError.cancelled)
                 } catch {
                     continuation.finish(throwing: LLMProviderError.providerFailed(String(describing: error)))
                 }

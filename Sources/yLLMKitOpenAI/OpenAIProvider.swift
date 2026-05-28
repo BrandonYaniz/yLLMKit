@@ -97,6 +97,8 @@ public final class OpenAIProvider: LLMProvider, @unchecked Sendable {
                     continuation.finish(throwing: error)
                 } catch let error as OpenAIHTTPError {
                     continuation.finish(throwing: Self.providerError(for: error.statusCode))
+                } catch is CancellationError {
+                    continuation.finish(throwing: LLMProviderError.cancelled)
                 } catch {
                     continuation.finish(throwing: LLMProviderError.providerFailed(String(describing: error)))
                 }

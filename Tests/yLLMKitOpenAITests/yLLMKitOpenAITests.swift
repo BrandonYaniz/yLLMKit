@@ -132,6 +132,31 @@ final class yLLMKitOpenAITests: XCTestCase {
         }
     }
 
+    func testOpenAIProviderMapsCancellation() async throws {
+        let model = openAIModel("gpt-test")
+        let provider = OpenAIProvider(
+            configuration: OpenAIProviderConfiguration(
+                apiKey: "test-key",
+                models: [model]
+            ),
+            transport: MockOpenAITransport(error: CancellationError())
+        )
+
+        do {
+            for try await _ in provider.streamChat(
+                request: LLMChatRequest(
+                    modelID: model.id,
+                    messages: [LLMMessage(role: .user, content: "Hello")]
+                )
+            ) {}
+            XCTFail("Expected stream to fail.")
+        } catch LLMProviderError.cancelled {
+            // Expected.
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
     func testOpenAIProviderRejectsEmptyAPIKeyDuringPreparation() async throws {
         let model = openAIModel("gpt-test")
         let provider = OpenAIProvider(
