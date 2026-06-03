@@ -236,6 +236,7 @@ See [docs/context-integration.md](docs/context-integration.md).
 - [Architecture](docs/architecture.md)
 - [API Shape](docs/api-shape.md)
 - [Context Integration](docs/context-integration.md)
+- [Continuous Integration](docs/ci.md)
 - [Model Manifests](docs/model-manifest.md)
 - [Performance and Cancellation](docs/performance-and-cancellation.md)
 
@@ -244,6 +245,12 @@ See [docs/context-integration.md](docs/context-integration.md).
 ```sh
 swift build
 swift test
+```
+
+CI uses the same package test entry point:
+
+```sh
+./scripts/ci-test.sh
 ```
 
 To run a live MLX download/inference smoke test, opt in explicitly:
