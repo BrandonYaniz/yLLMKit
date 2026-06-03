@@ -233,12 +233,16 @@ See [docs/context-integration.md](docs/context-integration.md).
 
 ## Documentation
 
+- [Changelog](CHANGELOG.md)
 - [Architecture](docs/architecture.md)
 - [API Shape](docs/api-shape.md)
 - [Context Integration](docs/context-integration.md)
 - [Continuous Integration](docs/ci.md)
 - [Model Manifests](docs/model-manifest.md)
 - [Performance and Cancellation](docs/performance-and-cancellation.md)
+- [Release Process](docs/release.md)
+- [Contributing](CONTRIBUTING.md)
+- [Security Policy](SECURITY.md)
 
 ## Development
 
