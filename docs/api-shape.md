@@ -261,4 +261,4 @@ The cross-provider public direction should move toward provider-neutral request/
 
 Do not break working MLX behavior without replacing it with tested provider-equivalent behavior.
 
-Legacy manifest and runtime types should be treated as migration inputs, not the destination API shape.
+Runtime and manifest types such as `LLMRuntime`, `LLMBackend`, `LLMSession`, and `ModelDescriptor` are local-runtime compatibility APIs during beta. They should not be removed until the local provider refinement and provider-specific local lifecycle APIs preserve their useful local-first behavior, including download progress, installed model discovery, explicit loading, unloading, removal, and local catalog metadata.

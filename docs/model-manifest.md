@@ -2,6 +2,8 @@
 
 Model manifests describe provider-scoped text/chat models without forcing app code to hardcode provider-specific names throughout the application.
 
+yLLMKit is local-first. Provider-neutral descriptors are the preferred app-facing shape, but local model catalogs still need provider-owned metadata such as repositories, revisions, RAM guidance, install state, and cache behavior.
+
 The new provider direction uses `LLMModelID`:
 
 ```text
@@ -58,8 +60,8 @@ Manifests should align with `LLMModelDescriptor` and may include provider-owned 
 - v1 manifests are text/chat only.
 - Do not add manifest fields for vision, audio, images, tool calling, function calling, embeddings, agents, realtime APIs, or file upload APIs in v1.
 
-## Legacy Compatibility
+## Local Runtime Compatibility
 
 The existing implementation still contains older `ModelDescriptor` fields such as `backendID`, `provider`, `repository`, and `preferredMaxOutputTokens`.
 
-Those fields are migration inputs for the MLX provider alignment work. New public documentation and new roadmap work should prefer provider-scoped `LLMModelDescriptor` values.
+Those fields are not remote-provider concepts, but they remain useful local-runtime catalog data for MLX and future local providers. New cross-provider app code should prefer provider-scoped `LLMModelDescriptor` values. Local provider and runtime work may continue to use `ModelDescriptor` or a future renamed local descriptor until `LocalLLMProvider` fully covers local lifecycle and catalog needs.

@@ -1,14 +1,14 @@
 # yLLMKit
 
-`yLLMKit` is a Swift package for building text/chat LLM features with a small provider-neutral core and optional provider products.
+`yLLMKit` is a local-first Swift package for building text/chat LLM features with a small provider-neutral core and optional provider products.
 
-The package gives Swift developers one shared chat interface for local and remote language models without forcing every app target to carry every provider dependency. Apps can start with the lightweight core types, add MLX for on-device Apple Silicon inference, add hosted providers such as OpenAI or Anthropic when remote models make sense, and use the context layer when prompts need structured source material instead of ad hoc string assembly.
+The package gives Swift developers one shared chat interface for local and remote language models without forcing every app target to carry every provider dependency. Local Apple Silicon inference through MLX is the primary path. Hosted providers such as OpenAI or Anthropic are included as courtesy integrations so apps can use one familiar package when remote models make sense. Apps can start with the lightweight core types, add MLX for local inference, add hosted providers selectively, and use the context layer when prompts need structured source material instead of ad hoc string assembly.
 
 This shape keeps product code flexible as model strategy changes. A SwiftUI app, AppKit app, command line tool, or service layer can build around the same request, response, streaming, settings, usage, and error types while still leaving provider-specific behavior in the product that owns it. That makes it easier to prototype with a mock backend, ship a local-first experience, fall back to remote models, or swap providers without rewriting the application layer that prepares conversations and consumes streamed output.
 
 ## Status
 
-This project is in early development.
+This project is pre-beta.
 
 The repository currently contains this product shape:
 
@@ -22,10 +22,13 @@ yLLMKitContext
 
 The v1 scope is text/chat only. Vision, audio, images, tool calling, function calling, embeddings, agents, realtime APIs, file uploads, workflow orchestration, and UI components are out of scope for v1.
 
+The beta contract is local-first: local model lifecycle, preparation progress, cache behavior, unloading, and removal must remain first-class. Remote provider products should share the common chat shape without constraining local functionality.
+
 ## Design Goals
 
 - Keep `yLLMKit` core small, UI-neutral, and provider-neutral.
 - Put MLX, OpenAI, Anthropic, GRDB, and other concrete dependencies in optional products.
+- Keep local model lifecycle first-class instead of reducing it to hosted-provider behavior.
 - Use provider-scoped model identifiers instead of global naked model names.
 - Stream text responses through Swift concurrency primitives.
 - Preserve app ownership of source-of-truth data.
@@ -55,13 +58,13 @@ Local Apple Silicon inference through MLX. This product owns local model catalog
 
 ### yLLMKitOpenAI
 
-Optional OpenAI text/chat provider. This product owns OpenAI request mapping, streaming mapping, usage mapping, configuration, and error normalization.
+Optional OpenAI text/chat provider. This courtesy integration owns OpenAI request mapping, streaming mapping, usage mapping, configuration, and error normalization.
 
 `yLLMKitOpenAI` lets developers use OpenAI models through the same provider-neutral request and stream interface they use elsewhere in the package. The app can keep its chat orchestration, cancellation handling, settings, and response rendering consistent while the provider product handles OpenAI-specific transport details, event parsing, usage reporting, and error normalization. That separation makes it practical to support hosted models without scattering provider-specific JSON and networking concerns throughout the app.
 
 ### yLLMKitAnthropic
 
-Optional Anthropic text/chat provider. This product owns Anthropic request mapping, streaming mapping, usage mapping, configuration, and error normalization.
+Optional Anthropic text/chat provider. This courtesy integration owns Anthropic request mapping, streaming mapping, usage mapping, configuration, and error normalization.
 
 `yLLMKitAnthropic` gives developers access to Anthropic text/chat models without changing the application-facing chat model. Provider-specific request formats, server-sent events, usage metadata, configuration, and error mapping stay inside the Anthropic product, while app code continues to work with shared `LLMChatRequest`, `LLMStreamEvent`, and response types. This is useful for apps that want to compare providers, offer provider choice, or keep a remote fallback available beside local inference.
 
