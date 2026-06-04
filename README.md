@@ -320,3 +320,10 @@ The smoke test defaults to `phi-2`. To use another supported model:
 ```sh
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer YLLMKIT_RUN_MLX_SMOKE=1 YLLMKIT_MLX_SMOKE_MODEL=fast-local-assistant swift test --enable-xctest --disable-swift-testing --filter yLLMKitMLXTests.testLiveMLXSmokeWhenEnabled
 ```
+
+Hosted provider smoke tests are also opt-in and require credentials plus an explicit model name:
+
+```sh
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer OPENAI_API_KEY=... YLLMKIT_RUN_OPENAI_SMOKE=1 YLLMKIT_OPENAI_SMOKE_MODEL=... swift test --enable-xctest --disable-swift-testing --filter yLLMKitOpenAITests.testLiveOpenAISmokeWhenEnabled
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer ANTHROPIC_API_KEY=... YLLMKIT_RUN_ANTHROPIC_SMOKE=1 YLLMKIT_ANTHROPIC_SMOKE_MODEL=... swift test --enable-xctest --disable-swift-testing --filter yLLMKitAnthropicTests.testLiveAnthropicSmokeWhenEnabled
+```

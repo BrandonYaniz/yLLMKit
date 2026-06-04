@@ -164,7 +164,7 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift build
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer YLLMKIT_RUN_MLX_SMOKE=1 swift test --enable-xctest --disable-swift-testing --filter yLLMKitMLXTests.testLiveMLXSmokeWhenEnabled
 ```
 
-OpenAI and Anthropic live smoke tests should be added before beta if hosted provider behavior is part of the beta claim. They should remain opt-in and use environment variables for credentials.
+OpenAI and Anthropic live smoke tests are opt-in and use environment variables for credentials and model names.
 
 ## Documentation Gates
 
@@ -187,5 +187,5 @@ The project is ready for a first beta when:
 - Existing local runtime APIs have an explicit implementation, compatibility, or migration status.
 - Core, MLX, OpenAI, Anthropic, and Context products build and pass default tests.
 - Live MLX smoke has been run on a compatible Apple Silicon machine, or release notes clearly say it was not run.
-- Hosted provider live smoke tests exist or release notes clearly limit hosted validation to mocked transports.
+- Hosted provider live smoke tests have been run with explicit model environment variables, or release notes clearly limit hosted validation to mocked transports.
 - Documentation explains what is supported, what is deferred, and how to validate a consuming app integration.

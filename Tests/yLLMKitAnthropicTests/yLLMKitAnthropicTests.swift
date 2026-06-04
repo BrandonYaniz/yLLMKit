@@ -209,6 +209,46 @@ final class yLLMKitAnthropicTests: XCTestCase {
         }
     }
 
+    func testLiveAnthropicSmokeWhenEnabled() async throws {
+        let environment = ProcessInfo.processInfo.environment
+        guard environment["YLLMKIT_RUN_ANTHROPIC_SMOKE"] == "1" else {
+            throw XCTSkip("Set YLLMKIT_RUN_ANTHROPIC_SMOKE=1 to run a live Anthropic smoke test.")
+        }
+        guard let apiKey = environment["ANTHROPIC_API_KEY"], !apiKey.isEmpty else {
+            throw XCTSkip("Set ANTHROPIC_API_KEY to run a live Anthropic smoke test.")
+        }
+        guard let modelName = environment["YLLMKIT_ANTHROPIC_SMOKE_MODEL"], !modelName.isEmpty else {
+            throw XCTSkip("Set YLLMKIT_ANTHROPIC_SMOKE_MODEL to run a live Anthropic smoke test.")
+        }
+
+        let modelID = LLMModelID(
+            providerID: LLMProviderID(rawValue: "anthropic"),
+            modelName: modelName
+        )
+        let provider = AnthropicProvider(
+            configuration: AnthropicProviderConfiguration(apiKey: apiKey)
+        )
+
+        var output = ""
+        for try await event in provider.streamChat(
+            request: LLMChatRequest(
+                modelID: modelID,
+                messages: [LLMMessage(role: .user, content: "Reply with the word ready.")],
+                settings: GenerationSettings(
+                    temperature: 0.0,
+                    topP: 1.0,
+                    maxOutputTokens: 8
+                )
+            )
+        ) {
+            if case .textDelta(let text) = event {
+                output += text
+            }
+        }
+
+        XCTAssertFalse(output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+    }
+
     private func anthropicModel(_ modelName: String) -> LLMModelDescriptor {
         LLMModelDescriptor(
             id: LLMModelID(
