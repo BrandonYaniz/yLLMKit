@@ -5,6 +5,16 @@ import yLLMKit
 @testable import yLLMKitAnthropic
 
 final class yLLMKitAnthropicTests: XCTestCase {
+    func testAnthropicProviderConformsToRemoteLLMProvider() async throws {
+        let provider: any RemoteLLMProvider = AnthropicProvider(
+            configuration: AnthropicProviderConfiguration(apiKey: "test-key"),
+            transport: MockAnthropicTransport(chunks: [])
+        )
+
+        XCTAssertEqual(provider.providerID, LLMProviderID(rawValue: "anthropic"))
+        try await provider.validateConfiguration()
+    }
+
     func testAnthropicProviderBuildsMessagesRequest() throws {
         let model = anthropicModel("claude-test")
         let provider = AnthropicProvider(
@@ -175,6 +185,22 @@ final class yLLMKitAnthropicTests: XCTestCase {
 
         do {
             try await provider.prepareModel(model.id)
+            XCTFail("Expected authentication failure.")
+        } catch LLMProviderError.authenticationFailed {
+            // Expected.
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
+    func testAnthropicProviderRejectsEmptyAPIKeyDuringConfigurationValidation() async throws {
+        let provider = AnthropicProvider(
+            configuration: AnthropicProviderConfiguration(apiKey: ""),
+            transport: MockAnthropicTransport(chunks: [])
+        )
+
+        do {
+            try await provider.validateConfiguration()
             XCTFail("Expected authentication failure.")
         } catch LLMProviderError.authenticationFailed {
             // Expected.

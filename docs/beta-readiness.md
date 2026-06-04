@@ -62,6 +62,12 @@ Local-first app code should also use the local provider refinement:
 
 The local refinement preserves lifecycle behavior that hosted providers do not naturally have, including installed-model listing, prepared-state checks, progress reporting, unload, and removal.
 
+Hosted-provider app code may use the remote provider refinement:
+
+- `RemoteLLMProvider`
+
+The remote refinement keeps hosted configuration validation separate from local lifecycle behavior.
+
 Existing runtime and local model APIs remain available during beta as local-runtime implementation and compatibility support:
 
 - `LLMRuntime`
@@ -91,6 +97,13 @@ Every beta provider should:
 MLX may use `prepareModel(_:)` for local download, load, warmup, or install validation.
 
 Remote providers may use `prepareModel(_:)` for configuration validation or a no-op when configuration and model catalogs do not require work.
+
+Every beta remote provider should:
+
+- Conform to `LLMProvider` for shared chat behavior.
+- Conform to `RemoteLLMProvider` for hosted configuration validation.
+- Keep API keys and credentials in consuming app runtime configuration.
+- Avoid adding hosted-only concepts to local lifecycle requirements.
 
 ## Local-First Contract
 

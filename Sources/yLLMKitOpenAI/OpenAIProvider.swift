@@ -1,7 +1,7 @@
 import Foundation
 import yLLMKit
 
-public final class OpenAIProvider: LLMProvider, @unchecked Sendable {
+public final class OpenAIProvider: RemoteLLMProvider, @unchecked Sendable {
     public let providerID = LLMProviderID(rawValue: "openai")
 
     private let configuration: OpenAIProviderConfiguration
@@ -27,12 +27,16 @@ public final class OpenAIProvider: LLMProvider, @unchecked Sendable {
         guard modelID.providerID == providerID else {
             throw LLMProviderError.modelNotFound(modelID)
         }
-        guard !configuration.apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            throw LLMProviderError.authenticationFailed("OpenAI API key is empty.")
-        }
+        try await validateConfiguration()
         if !configuration.models.isEmpty,
            !configuration.models.contains(where: { $0.id == modelID }) {
             throw LLMProviderError.modelNotFound(modelID)
+        }
+    }
+
+    public func validateConfiguration() async throws {
+        guard !configuration.apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw LLMProviderError.authenticationFailed("OpenAI API key is empty.")
         }
     }
 

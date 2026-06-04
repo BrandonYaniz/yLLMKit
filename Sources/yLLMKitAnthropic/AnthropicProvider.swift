@@ -1,7 +1,7 @@
 import Foundation
 import yLLMKit
 
-public final class AnthropicProvider: LLMProvider, @unchecked Sendable {
+public final class AnthropicProvider: RemoteLLMProvider, @unchecked Sendable {
     public let providerID = LLMProviderID(rawValue: "anthropic")
 
     private let configuration: AnthropicProviderConfiguration
@@ -24,12 +24,16 @@ public final class AnthropicProvider: LLMProvider, @unchecked Sendable {
         guard modelID.providerID == providerID else {
             throw LLMProviderError.modelNotFound(modelID)
         }
-        guard !configuration.apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            throw LLMProviderError.authenticationFailed("Anthropic API key is empty.")
-        }
+        try await validateConfiguration()
         if !configuration.models.isEmpty,
            !configuration.models.contains(where: { $0.id == modelID }) {
             throw LLMProviderError.modelNotFound(modelID)
+        }
+    }
+
+    public func validateConfiguration() async throws {
+        guard !configuration.apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw LLMProviderError.authenticationFailed("Anthropic API key is empty.")
         }
     }
 

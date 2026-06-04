@@ -56,6 +56,20 @@ public protocol LocalLLMProvider: LLMProvider {
 
 Hosted providers such as OpenAI and Anthropic should not be forced to implement local lifecycle concepts.
 
+## Remote Provider
+
+Remote providers share the base chat interface and may expose hosted-configuration validation without adopting local lifecycle behavior.
+
+```swift
+public protocol RemoteLLMProvider: LLMProvider {
+    func validateConfiguration() async throws
+}
+```
+
+`validateConfiguration()` should catch missing or malformed hosted-provider configuration that can be checked without performing a live model request. API keys should still come from the consuming app's secure runtime configuration, not source-controlled examples.
+
+Hosted provider products are courtesy integrations. They should remain familiar to use beside local providers, but they should not add remote-only concepts to local provider requirements.
+
 ## Model IDs
 
 ```swift

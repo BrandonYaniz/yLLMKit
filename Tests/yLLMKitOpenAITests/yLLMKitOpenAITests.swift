@@ -5,6 +5,16 @@ import yLLMKit
 @testable import yLLMKitOpenAI
 
 final class yLLMKitOpenAITests: XCTestCase {
+    func testOpenAIProviderConformsToRemoteLLMProvider() async throws {
+        let provider: any RemoteLLMProvider = OpenAIProvider(
+            configuration: OpenAIProviderConfiguration(apiKey: "test-key"),
+            transport: MockOpenAITransport(chunks: [])
+        )
+
+        XCTAssertEqual(provider.providerID, LLMProviderID(rawValue: "openai"))
+        try await provider.validateConfiguration()
+    }
+
     func testOpenAIProviderBuildsChatCompletionRequest() throws {
         let model = openAIModel("gpt-test")
         let provider = OpenAIProvider(
@@ -166,6 +176,22 @@ final class yLLMKitOpenAITests: XCTestCase {
 
         do {
             try await provider.prepareModel(model.id)
+            XCTFail("Expected authentication failure.")
+        } catch LLMProviderError.authenticationFailed {
+            // Expected.
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
+    func testOpenAIProviderRejectsEmptyAPIKeyDuringConfigurationValidation() async throws {
+        let provider = OpenAIProvider(
+            configuration: OpenAIProviderConfiguration(apiKey: ""),
+            transport: MockOpenAITransport(chunks: [])
+        )
+
+        do {
+            try await provider.validateConfiguration()
             XCTFail("Expected authentication failure.")
         } catch LLMProviderError.authenticationFailed {
             // Expected.
