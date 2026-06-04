@@ -28,6 +28,10 @@ let package = Package(
         .library(
             name: "yLLMKitContext",
             targets: ["yLLMKitContext"]
+        ),
+        .executable(
+            name: "yLLMKitDemoCLI",
+            targets: ["yLLMKitDemoCLI"]
         )
     ],
     dependencies: [
@@ -64,6 +68,15 @@ let package = Package(
             dependencies: [
                 "yLLMKit",
                 .product(name: "GRDB", package: "GRDB.swift")
+            ]
+        ),
+        .executableTarget(
+            name: "yLLMKitDemoCLI",
+            dependencies: [
+                "yLLMKit",
+                "yLLMKitMLX",
+                "yLLMKitOpenAI",
+                "yLLMKitAnthropic"
             ]
         ),
         .testTarget(

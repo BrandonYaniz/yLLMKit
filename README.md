@@ -78,6 +78,21 @@ Optional context layer for conversation transcripts, app-supplied text sources, 
 
 A Swift project demonstrating this library is available at [BrandonYaniz/yLLMKit-Demo](https://github.com/BrandonYaniz/yLLMKit-Demo).
 
+The package also includes a minimal local-first demo CLI:
+
+```sh
+swift run yLLMKitDemoCLI list-mlx-models
+swift run yLLMKitDemoCLI prepare-mlx phi-2
+swift run yLLMKitDemoCLI chat-mlx phi-2 "Reply with the word ready."
+```
+
+Hosted provider commands are available as courtesy integration checks and require runtime credentials:
+
+```sh
+OPENAI_API_KEY=... swift run yLLMKitDemoCLI chat-openai gpt-test "Say hello."
+ANTHROPIC_API_KEY=... swift run yLLMKitDemoCLI chat-anthropic claude-test "Say hello."
+```
+
 ## Requirements
 
 - Swift 6.2 or later.
