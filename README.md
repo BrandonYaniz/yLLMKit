@@ -212,7 +212,38 @@ for try await event in provider.streamChat(request: request) {
 
 The app owns where messages come from and where responses go. `yLLMKit` provides the shared chat shape, provider products handle model-specific execution, and `yLLMKitContext` can help turn app-owned source material into prompt-ready messages when the conversation needs more than the latest user input.
 
-Existing runtime/session APIs may remain during migration, but new cross-provider work should move toward the provider-neutral request and stream shape documented in [docs/api-shape.md](docs/api-shape.md).
+## Local Lifecycle
+
+Local providers expose lifecycle controls that hosted providers do not need:
+
+```swift
+let localProvider: any LocalLLMProvider = MLXProvider()
+
+let modelID = LLMModelID(
+    providerID: LLMProviderID(rawValue: "mlx"),
+    modelName: "phi-2"
+)
+
+for try await progress in localProvider.prepareModelWithProgress(modelID) {
+    print(progress.phase, progress.fractionCompleted ?? 0)
+}
+
+let isReady = try await localProvider.isModelPrepared(modelID)
+```
+
+Apps that already use `LLMRuntime`, `ModelRegistry`, `ModelStore`, and `LLMBackend` can adopt the provider-first API without replacing the runtime immediately:
+
+```swift
+let provider: any LocalLLMProvider = RuntimeLocalLLMProvider(
+    providerID: LLMProviderID(rawValue: "local"),
+    runtime: runtime,
+    backendID: "mlx"
+)
+```
+
+`RuntimeLocalLLMProvider` preserves the runtime-backed local registry, store, download/install, load, unload, removal, and session behavior while presenting the same `LocalLLMProvider` chat surface as provider products.
+
+Existing runtime/session APIs remain available during migration, but new cross-provider work should move toward the provider-neutral request and stream shape documented in [docs/api-shape.md](docs/api-shape.md).
 
 ## Model Selection
 
