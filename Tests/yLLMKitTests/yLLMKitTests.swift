@@ -513,6 +513,143 @@ final class yLLMKitTests: XCTestCase {
         XCTAssertEqual(loadCount, 1)
     }
 
+    func testRuntimeLocalProviderReportsProviderScopedModels() async throws {
+        let countingModel = mockModel(id: "counting-model", backendID: "counting")
+        let otherModel = mockModel(id: "other-model", backendID: "other")
+        let registry = try ModelRegistry(models: [countingModel, otherModel])
+        let store = try FileModelStore(rootDirectory: temporaryDirectory())
+        let runtime = try LLMRuntime(
+            modelRegistry: registry,
+            modelStore: store,
+            backends: [CountingBackend(models: [countingModel])]
+        )
+        let provider = RuntimeLocalLLMProvider(
+            providerID: LLMProviderID(rawValue: "runtime"),
+            runtime: runtime,
+            backendID: "counting"
+        )
+
+        let models = try await provider.availableModels()
+        let descriptor = try XCTUnwrap(models.first)
+
+        XCTAssertEqual(models.count, 1)
+        XCTAssertEqual(descriptor.id.description, "runtime:counting-model")
+        XCTAssertEqual(descriptor.providerMetadata["backendID"], .string("counting"))
+        XCTAssertTrue(descriptor.capabilities.supportsLocalPreparation)
+    }
+
+    func testRuntimeLocalProviderPrepareModelDownloadsAndInstalls() async throws {
+        let root = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let model = mockModel(id: "provider-download-model", backendID: "counting")
+        let registry = try ModelRegistry(models: [model])
+        let store = try FileModelStore(rootDirectory: root)
+        let backend = CountingBackend(
+            models: [model],
+            downloadRoot: root.appendingPathComponent("downloads")
+        )
+        let runtime = try LLMRuntime(
+            modelRegistry: registry,
+            modelStore: store,
+            backends: [backend]
+        )
+        let provider = RuntimeLocalLLMProvider(
+            providerID: LLMProviderID(rawValue: "runtime"),
+            runtime: runtime,
+            backendID: "counting"
+        )
+        let modelID = LLMModelID(
+            providerID: LLMProviderID(rawValue: "runtime"),
+            modelName: model.id
+        )
+
+        var phases: [ModelDownloadProgress.Phase] = []
+        for try await progress in provider.prepareModelWithProgress(modelID) {
+            phases.append(progress.phase)
+        }
+
+        let isPrepared = try await provider.isModelPrepared(modelID)
+        let localModels = try await provider.localModels()
+        XCTAssertEqual(phases, [.queued, .downloading, .complete])
+        XCTAssertTrue(isPrepared)
+        XCTAssertEqual(localModels.map(\.modelID), [model.id])
+    }
+
+    func testRuntimeLocalProviderStreamsThroughRuntimeSession() async throws {
+        let root = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let model = mockModel(id: "provider-chat-model", backendID: "counting")
+        let registry = try ModelRegistry(models: [model])
+        let store = try FileModelStore(rootDirectory: root)
+        try await registerInstalledMockModel(model, in: store, root: root)
+        let backend = CountingBackend(models: [model])
+        let runtime = try LLMRuntime(
+            modelRegistry: registry,
+            modelStore: store,
+            backends: [backend]
+        )
+        let provider = RuntimeLocalLLMProvider(
+            providerID: LLMProviderID(rawValue: "runtime"),
+            runtime: runtime,
+            backendID: "counting"
+        )
+        let modelID = LLMModelID(
+            providerID: LLMProviderID(rawValue: "runtime"),
+            modelName: model.id
+        )
+
+        var events: [LLMStreamEvent] = []
+        for try await event in provider.streamChat(
+            request: LLMChatRequest(
+                modelID: modelID,
+                messages: [LLMMessage(role: .user, content: "Hello")]
+            )
+        ) {
+            events.append(event)
+        }
+
+        let loadCount = await backend.loadCount
+        XCTAssertEqual(loadCount, 1)
+        XCTAssertEqual(events.count, 4)
+        XCTAssertEqual(events.first, .started(LLMStreamStart(modelID: modelID)))
+        XCTAssertEqual(Array(events.dropFirst().prefix(2)), [.textDelta("mock"), .textDelta(" response")])
+        guard case .completed(let response) = events.last else {
+            XCTFail("Expected completed event.")
+            return
+        }
+        XCTAssertEqual(response.message.content, "mock response")
+        XCTAssertEqual(response.usage?.outputTokens, 2)
+    }
+
+    func testRuntimeLocalProviderRejectsWrongProviderModelID() async throws {
+        let model = mockModel(id: "provider-model", backendID: "counting")
+        let registry = try ModelRegistry(models: [model])
+        let store = try FileModelStore(rootDirectory: temporaryDirectory())
+        let runtime = try LLMRuntime(
+            modelRegistry: registry,
+            modelStore: store,
+            backends: [CountingBackend(models: [model])]
+        )
+        let provider = RuntimeLocalLLMProvider(
+            providerID: LLMProviderID(rawValue: "runtime"),
+            runtime: runtime,
+            backendID: "counting"
+        )
+        let modelID = LLMModelID(
+            providerID: LLMProviderID(rawValue: "other"),
+            modelName: model.id
+        )
+
+        do {
+            try await provider.prepareModel(modelID)
+            XCTFail("Expected provider mismatch to throw.")
+        } catch LLMProviderError.modelNotFound(modelID) {
+            // Expected.
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
     func testMockSessionHonorsStopSequences() async throws {
         let session = MockLLMSession(
             model: mockModel(id: "stop-model", backendID: "mock"),

@@ -71,6 +71,7 @@ The remote refinement keeps hosted configuration validation separate from local 
 Existing runtime and local model APIs remain available during beta as local-runtime implementation and compatibility support:
 
 - `LLMRuntime`
+- `RuntimeLocalLLMProvider`
 - `LLMBackend`
 - `LLMSession`
 - `ModelDescriptor`
@@ -121,6 +122,8 @@ Every beta local provider should:
 - Keep local lifecycle, cache, memory, and model metadata out of remote provider requirements.
 
 `LLMRuntime`, `LLMBackend`, `LLMSession`, and `ModelDescriptor` may continue to support the local runtime while the local provider refinement matures.
+
+`RuntimeLocalLLMProvider` is the compatibility adapter for runtime-backed local apps that want to adopt `LocalLLMProvider` without giving up existing runtime install, load, unload, removal, and session behavior.
 
 ## Context Contract
 
