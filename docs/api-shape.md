@@ -54,6 +54,8 @@ public protocol LocalLLMProvider: LLMProvider {
 
 `removeModel(_:)` should remove provider-owned local model state where practical. Providers should document whether this removes on-disk files, in-memory loaded state, package-managed metadata, or some combination of those.
 
+Local providers may accept a `ModelStore` or provider-specific storage configuration when durable installed-model metadata is needed across provider instances or process launches.
+
 Hosted providers such as OpenAI and Anthropic should not be forced to implement local lifecycle concepts.
 
 ## Remote Provider

@@ -107,6 +107,65 @@ final class yLLMKitMLXTests: XCTestCase {
         XCTAssertFalse(isPrepared)
     }
 
+    func testMLXProviderUsesModelStoreForLocalModelsAndPreparedState() async throws {
+        let root = try temporaryDirectory()
+        let modelDirectory = root.appendingPathComponent("phi-2-model")
+        try FileManager.default.createDirectory(at: modelDirectory, withIntermediateDirectories: true)
+        let store = try FileModelStore(rootDirectory: root)
+        let localModel = LocalModel(
+            id: "local-phi-2",
+            modelID: "phi-2",
+            backendID: "mlx",
+            path: modelDirectory.path,
+            installedAt: Date(timeIntervalSince1970: 1)
+        )
+        try await store.register(localModel)
+
+        let provider = MLXProvider(modelStore: store)
+        let modelID = LLMModelID(
+            providerID: LLMProviderID(rawValue: "mlx"),
+            modelName: "phi-2"
+        )
+
+        let localModels = try await provider.localModels()
+        let storedModel = try XCTUnwrap(localModels.first)
+        XCTAssertEqual(localModels.count, 1)
+        XCTAssertEqual(storedModel.id, localModel.id)
+        XCTAssertEqual(storedModel.modelID, localModel.modelID)
+        XCTAssertEqual(storedModel.backendID, localModel.backendID)
+        XCTAssertEqual(storedModel.path, localModel.path)
+        let isPrepared = try await provider.isModelPrepared(modelID)
+        XCTAssertTrue(isPrepared)
+    }
+
+    func testMLXProviderRemoveModelRemovesModelStoreEntry() async throws {
+        let root = try temporaryDirectory()
+        let modelDirectory = root.appendingPathComponent("phi-2-model")
+        try FileManager.default.createDirectory(at: modelDirectory, withIntermediateDirectories: true)
+        let store = try FileModelStore(rootDirectory: root)
+        let localModel = LocalModel(
+            id: "local-phi-2",
+            modelID: "phi-2",
+            backendID: "mlx",
+            path: modelDirectory.path,
+            installedAt: Date(timeIntervalSince1970: 1)
+        )
+        try await store.register(localModel)
+
+        let provider = MLXProvider(modelStore: store)
+        let modelID = LLMModelID(
+            providerID: LLMProviderID(rawValue: "mlx"),
+            modelName: "phi-2"
+        )
+
+        try await provider.removeModel(modelID)
+
+        let localModels = try await provider.localModels()
+        XCTAssertTrue(localModels.isEmpty)
+        let isPrepared = try await provider.isModelPrepared(modelID)
+        XCTAssertFalse(isPrepared)
+    }
+
     func testMLXProviderRejectsUnknownModelWithoutLiveWork() async throws {
         let provider = MLXProvider()
         let missingModelID = LLMModelID(
@@ -281,5 +340,13 @@ final class yLLMKitMLXTests: XCTestCase {
 
         XCTAssertFalse(output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
     }
+}
+
+private func temporaryDirectory() throws -> URL {
+    let url = FileManager.default.temporaryDirectory
+        .appendingPathComponent("yLLMKitMLXTests")
+        .appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+    return url
 }
 #endif

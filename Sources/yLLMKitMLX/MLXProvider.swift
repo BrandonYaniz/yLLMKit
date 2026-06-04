@@ -5,11 +5,14 @@ public final class MLXProvider: LocalLLMProvider, @unchecked Sendable {
     public let providerID = LLMProviderID(rawValue: "mlx")
 
     private let backend: MLXBackend
+    private let modelStore: (any ModelStore)?
 
     public init(
-        backend: MLXBackend = MLXBackend()
+        backend: MLXBackend = MLXBackend(),
+        modelStore: (any ModelStore)? = nil
     ) {
         self.backend = backend
+        self.modelStore = modelStore
     }
 
     public func availableModels() async throws -> [LLMModelDescriptor] {
@@ -21,12 +24,21 @@ public final class MLXProvider: LocalLLMProvider, @unchecked Sendable {
     }
 
     public func localModels() async throws -> [LocalModel] {
-        try await backend.localModels()
+        if let modelStore {
+            return try await modelStore.localModels()
+        }
+        return try await backend.localModels()
     }
 
     public func isModelPrepared(_ modelID: LLMModelID) async throws -> Bool {
         let model = try await legacyModel(for: modelID)
-        return try await backend.isModelPrepared(model.id)
+        if try await backend.isModelPrepared(model.id) {
+            return true
+        }
+        if let modelStore {
+            return try await modelStore.isModelInstalled(model.id)
+        }
+        return false
     }
 
     public func prepareModelWithProgress(
@@ -40,6 +52,9 @@ public final class MLXProvider: LocalLLMProvider, @unchecked Sendable {
 
                     do {
                         for try await progress in stream {
+                            if progress.phase == .complete, let localModel = progress.localModel {
+                                try await modelStore?.register(localModel)
+                            }
                             continuation.yield(progress)
                         }
                         continuation.finish()
@@ -73,6 +88,7 @@ public final class MLXProvider: LocalLLMProvider, @unchecked Sendable {
     public func removeModel(_ modelID: LLMModelID) async throws {
         let model = try await legacyModel(for: modelID)
         try await backend.removeModel(model.id)
+        try await modelStore?.removeModel(id: model.id)
     }
 
     public func streamChat(
@@ -82,8 +98,10 @@ public final class MLXProvider: LocalLLMProvider, @unchecked Sendable {
             let task = Task {
                 do {
                     let model = try await legacyModel(for: request.modelID)
-                    let localModel = try await backend.localModels()
-                        .first { $0.modelID == model.id }
+                    let localModel = try await localModel(for: model.id)
+                    if !(try await backend.isModelPrepared(model.id)) {
+                        _ = try await backend.loadModel(model, from: localModel)
+                    }
                     let session = try await backend.createSession(
                         model: LoadedModel(model: model, localModel: localModel),
                         configuration: SessionConfiguration(systemPrompt: nil)
@@ -145,6 +163,14 @@ public final class MLXProvider: LocalLLMProvider, @unchecked Sendable {
             throw LLMProviderError.modelNotFound(modelID)
         }
         return model
+    }
+
+    private func localModel(for modelID: String) async throws -> LocalModel? {
+        if let modelStore {
+            return try await modelStore.localModel(for: modelID)
+        }
+        return try await backend.localModels()
+            .first { $0.modelID == modelID }
     }
 }
 
