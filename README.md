@@ -236,6 +236,7 @@ See [docs/context-integration.md](docs/context-integration.md).
 - [Changelog](CHANGELOG.md)
 - [Architecture](docs/architecture.md)
 - [API Shape](docs/api-shape.md)
+- [Beta Readiness](docs/beta-readiness.md)
 - [Context Integration](docs/context-integration.md)
 - [Continuous Integration](docs/ci.md)
 - [Model Manifests](docs/model-manifest.md)

@@ -18,6 +18,8 @@ Local or remote model
 Streamed or complete text response
 ```
 
+yLLMKit is local-first. Hosted provider products exist so developers can use one familiar package across local and remote model strategies, but remote behavior should not constrain local model lifecycle, cache, memory, or preparation APIs.
+
 ## Product Layout
 
 ```text
@@ -64,6 +66,14 @@ Sources/
 - Provider-specific model catalogs where useful.
 - Provider-specific error mapping.
 - Provider-specific dependencies.
+
+### Local provider products own
+
+- Local model installation and discovery.
+- Download, verification, preparation, loading, warmup, unloading, and removal behavior.
+- Local preparation progress reporting.
+- Local memory and cache policy.
+- Local model metadata that does not apply to hosted providers.
 
 ### yLLMKitContext owns
 

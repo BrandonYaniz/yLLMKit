@@ -30,6 +30,10 @@ public actor MLXBackend: LLMBackend {
         localModelsByModelID.values.sorted { $0.modelID < $1.modelID }
     }
 
+    public func isModelPrepared(_ modelID: String) async throws -> Bool {
+        containersByModelID[modelID] != nil || localModelsByModelID[modelID] != nil
+    }
+
     public func downloadModel(_ request: ModelDownloadRequest) async -> AsyncThrowingStream<ModelDownloadProgress, Error> {
         AsyncThrowingStream { continuation in
             let task = Task {
@@ -149,6 +153,11 @@ public actor MLXBackend: LLMBackend {
         containersByModelID.removeValue(forKey: modelID)
         loadingContainersByModelID[modelID]?.cancel()
         loadingContainersByModelID.removeValue(forKey: modelID)
+    }
+
+    public func removeModel(_ modelID: String) async throws {
+        try await unloadModel(modelID)
+        localModelsByModelID.removeValue(forKey: modelID)
     }
 
     public func createSession(

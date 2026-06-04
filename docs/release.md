@@ -11,9 +11,11 @@ Provider products should remain independently optional. A release should not mak
 ## Pre-Release Checklist
 
 - Confirm the README status, requirements, installation instructions, and product list are current.
+- Review the beta contract in `docs/beta-readiness.md` for scope, API status, validation gates, and known limitations.
 - Update `CHANGELOG.md` with the release date and user-facing changes.
 - Run `./scripts/ci-test.sh` on a complete macOS Swift/Xcode installation.
 - Run live MLX smoke tests when MLX model preparation, loading, prompting, streaming, or cancellation changed.
+- Run hosted provider smoke tests when OpenAI or Anthropic request mapping, stream parsing, usage mapping, error mapping, or configuration changed.
 - Confirm provider examples do not contain real credentials.
 - Review public API changes against `docs/api-shape.md`.
 - Confirm `Package.resolved` reflects intentional dependency updates.

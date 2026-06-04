@@ -87,6 +87,26 @@ final class yLLMKitMLXTests: XCTestCase {
         XCTAssertEqual(phiMini.capabilities.contextWindow, 131072)
     }
 
+    func testMLXProviderConformsToLocalLLMProvider() {
+        let provider: any LocalLLMProvider = MLXProvider()
+
+        XCTAssertEqual(provider.providerID, LLMProviderID(rawValue: "mlx"))
+    }
+
+    func testMLXProviderReportsUnpreparedKnownModelWithoutLiveWork() async throws {
+        let provider = MLXProvider()
+        let modelID = LLMModelID(
+            providerID: LLMProviderID(rawValue: "mlx"),
+            modelName: "phi-2"
+        )
+
+        let localModels = try await provider.localModels()
+        let isPrepared = try await provider.isModelPrepared(modelID)
+
+        XCTAssertTrue(localModels.isEmpty)
+        XCTAssertFalse(isPrepared)
+    }
+
     func testMLXProviderRejectsUnknownModelWithoutLiveWork() async throws {
         let provider = MLXProvider()
         let missingModelID = LLMModelID(
@@ -96,6 +116,23 @@ final class yLLMKitMLXTests: XCTestCase {
 
         do {
             try await provider.prepareModel(missingModelID)
+            XCTFail("Expected missing model preparation to throw.")
+        } catch LLMProviderError.modelNotFound(missingModelID) {
+            // Expected.
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
+    func testMLXProviderProgressPreparationRejectsUnknownModelWithoutLiveWork() async throws {
+        let provider = MLXProvider()
+        let missingModelID = LLMModelID(
+            providerID: LLMProviderID(rawValue: "mlx"),
+            modelName: "missing"
+        )
+
+        do {
+            for try await _ in provider.prepareModelWithProgress(missingModelID) {}
             XCTFail("Expected missing model preparation to throw.")
         } catch LLMProviderError.modelNotFound(missingModelID) {
             // Expected.

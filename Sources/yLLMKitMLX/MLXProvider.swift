@@ -1,7 +1,7 @@
 import Foundation
 import yLLMKit
 
-public final class MLXProvider: LLMProvider, @unchecked Sendable {
+public final class MLXProvider: LocalLLMProvider, @unchecked Sendable {
     public let providerID = LLMProviderID(rawValue: "mlx")
 
     private let backend: MLXBackend
@@ -17,14 +17,62 @@ public final class MLXProvider: LLMProvider, @unchecked Sendable {
     }
 
     public func prepareModel(_ modelID: LLMModelID) async throws {
-        let model = try await legacyModel(for: modelID)
-        let stream = await backend.downloadAndWarmModel(ModelDownloadRequest(model: model))
+        for try await _ in prepareModelWithProgress(modelID) {}
+    }
 
-        do {
-            for try await _ in stream {}
-        } catch {
-            throw LLMProviderError.providerFailed(String(describing: error))
+    public func localModels() async throws -> [LocalModel] {
+        try await backend.localModels()
+    }
+
+    public func isModelPrepared(_ modelID: LLMModelID) async throws -> Bool {
+        let model = try await legacyModel(for: modelID)
+        return try await backend.isModelPrepared(model.id)
+    }
+
+    public func prepareModelWithProgress(
+        _ modelID: LLMModelID
+    ) -> AsyncThrowingStream<ModelDownloadProgress, Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    let model = try await legacyModel(for: modelID)
+                    let stream = await backend.downloadAndWarmModel(ModelDownloadRequest(model: model))
+
+                    do {
+                        for try await progress in stream {
+                            continuation.yield(progress)
+                        }
+                        continuation.finish()
+                    } catch let error as LLMProviderError {
+                        continuation.finish(throwing: error)
+                    } catch is CancellationError {
+                        continuation.finish(throwing: LLMProviderError.cancelled)
+                    } catch {
+                        continuation.finish(throwing: LLMProviderError.providerFailed(String(describing: error)))
+                    }
+                } catch let error as LLMProviderError {
+                    continuation.finish(throwing: error)
+                } catch is CancellationError {
+                    continuation.finish(throwing: LLMProviderError.cancelled)
+                } catch {
+                    continuation.finish(throwing: LLMProviderError.providerFailed(String(describing: error)))
+                }
+            }
+
+            continuation.onTermination = { @Sendable _ in
+                task.cancel()
+            }
         }
+    }
+
+    public func unloadModel(_ modelID: LLMModelID) async throws {
+        let model = try await legacyModel(for: modelID)
+        try await backend.unloadModel(model.id)
+    }
+
+    public func removeModel(_ modelID: LLMModelID) async throws {
+        let model = try await legacyModel(for: modelID)
+        try await backend.removeModel(model.id)
     }
 
     public func streamChat(

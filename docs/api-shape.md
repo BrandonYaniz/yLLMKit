@@ -28,6 +28,34 @@ For local providers, preparation may validate install state, download, load, or 
 
 If local lifecycle behavior needs richer progress, keep that behavior in the local provider product or a local-model protocol refinement rather than adding MLX-specific lifecycle requirements to core.
 
+## Local Provider
+
+yLLMKit is local-first. Local providers should share the same chat interface as remote providers, but they also need explicit lifecycle controls that hosted providers do not have.
+
+```swift
+public protocol LocalLLMProvider: LLMProvider {
+    func localModels() async throws -> [LocalModel]
+    func isModelPrepared(_ modelID: LLMModelID) async throws -> Bool
+
+    func prepareModelWithProgress(
+        _ modelID: LLMModelID
+    ) -> AsyncThrowingStream<ModelDownloadProgress, Error>
+
+    func unloadModel(_ modelID: LLMModelID) async throws
+    func removeModel(_ modelID: LLMModelID) async throws
+}
+```
+
+`LLMProvider.prepareModel(_:)` remains the simple cross-provider preparation call.
+
+`LocalLLMProvider.prepareModelWithProgress(_:)` is the local-first path for apps that need to show download, install, load, or warmup progress.
+
+`unloadModel(_:)` should release loaded runtime resources where the provider supports that.
+
+`removeModel(_:)` should remove provider-owned local model state where practical. Providers should document whether this removes on-disk files, in-memory loaded state, package-managed metadata, or some combination of those.
+
+Hosted providers such as OpenAI and Anthropic should not be forced to implement local lifecycle concepts.
+
 ## Model IDs
 
 ```swift
