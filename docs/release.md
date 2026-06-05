@@ -16,6 +16,7 @@ Provider products should remain independently optional. A release should not mak
 - Run `./scripts/ci-test.sh` on a complete macOS Swift/Xcode installation.
 - Run live MLX smoke tests when MLX model preparation, loading, prompting, streaming, or cancellation changed.
 - Run hosted provider smoke tests when OpenAI or Anthropic request mapping, stream parsing, usage mapping, error mapping, or configuration changed.
+- Record which default and live validation commands were run, including skipped live smoke tests.
 - Confirm provider examples do not contain real credentials.
 - Review public API changes against `docs/api-shape.md`.
 - Confirm `Package.resolved` reflects intentional dependency updates.
@@ -24,3 +25,24 @@ Provider products should remain independently optional. A release should not mak
 ## Release Notes
 
 Release notes should call out public API changes, provider behavior changes, dependency or platform requirement changes, migration guidance, and known limitations. Keep opt-in validation steps, such as live MLX smoke tests, separate from the default CI result so consumers can understand what was covered by automation.
+
+## Validation Record
+
+Every beta or release candidate should include a short validation record in the changelog or release notes:
+
+```text
+Default CI:
+- Command:
+- Date:
+- Result:
+
+Live smoke tests:
+- MLX:
+- OpenAI:
+- Anthropic:
+
+Known validation gaps:
+-
+```
+
+If a live smoke test is not run, say that directly and include the reason, such as missing credentials, unavailable Apple Silicon/Metal setup, or intentionally mocked-only hosted-provider validation.
