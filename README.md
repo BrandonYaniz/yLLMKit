@@ -274,7 +274,7 @@ The core package preserves provider metadata but does not interpret provider-spe
 
 `yLLMKit` does not own your app database, document store, search index, citation UI, or source-of-truth data.
 
-Apps can gather their own context and pass it as messages. Apps may also use `yLLMKitContext` to store app-supplied text, chunk long sources, maintain summaries, and build prompt-ready context packages.
+Apps can gather their own context and pass it as messages. Apps may also use `yLLMKitContext` to store app-supplied text, chunk long sources, build provider-backed summary chunks or conversation snapshots, and build prompt-ready context packages.
 
 If a model response proposes changing app data, treat the response as a proposal. Let the user review, accept, edit, or reject the change before your app writes anything.
 

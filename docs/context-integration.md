@@ -70,6 +70,29 @@ Allowed:
 - Deterministic-only chunking with no model summarization.
 - App-supplied summaries.
 
+## Minimal Provider Summarization
+
+`ProviderContextSummarizer` can use any `LLMProvider` to create derived summaries:
+
+- `summarizeChunks(_:)` produces a `ContextChunk` with `kind == .summary`.
+- `summarizeConversation(_:)` produces a `ConversationSnapshot`.
+
+The summarizer does not write to storage. Apps decide when to call `saveChunk(_:)` or `saveSnapshot(_:)`, and raw transcript/source text remains authoritative.
+
+```swift
+let summarizer = ProviderContextSummarizer(provider: provider)
+
+let summaryChunk = try await summarizer.summarizeChunks(
+    ContextChunkSummaryRequest(
+        sourceID: sourceID,
+        modelID: summaryModelID,
+        chunks: retrievedChunks
+    )
+)
+
+try await contextStore.saveChunk(summaryChunk)
+```
+
 ## Full-Book-Sized Text
 
 Apps may pass full-book-sized text into `yLLMKitContext`.

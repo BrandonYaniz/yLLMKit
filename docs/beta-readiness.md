@@ -23,7 +23,7 @@ Beta includes:
 - MLX local text/chat lifecycle, preparation, progress, and streaming through local and shared provider APIs.
 - OpenAI text/chat streaming through the shared provider API as a courtesy integration.
 - Anthropic text/chat streaming through the shared provider API as a courtesy integration.
-- Context storage, FTS search, token-estimate chunking, deterministic prompt budgeting, source references, and prompt-ready message construction.
+- Context storage, FTS search, token-estimate chunking, minimal provider-backed summarization, deterministic prompt budgeting, source references, and prompt-ready message construction.
 - Mock provider behavior for tests and examples.
 
 Beta does not include:
@@ -141,10 +141,11 @@ The current beta-ready context surface is deterministic context preparation:
 - GRDB-backed storage.
 - FTS search.
 - Token-estimate chunking.
+- Minimal provider-backed summarization for summary chunks and conversation snapshots.
 - Prompt budgeting.
 - Prompt-ready `LLMMessage` output.
 
-Provider-backed hierarchical summarization is a planned beta-completion item unless it is implemented before the first beta tag.
+Provider-backed summarization is intentionally minimal for beta. It creates derived summary chunks and conversation snapshots through a caller-supplied `LLMProvider`; apps still choose when to persist those derived artifacts.
 
 ## Validation Gates
 

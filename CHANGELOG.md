@@ -16,6 +16,7 @@ This project is in early development and has not tagged a stable `1.0.0` release
 - Provider-scoped model IDs through `LLMProviderID` and `LLMModelID`.
 - Local-first demo CLI commands for MLX preparation/chat and hosted-provider smoke checks.
 - Opt-in live smoke tests for MLX, OpenAI, and Anthropic.
+- Minimal provider-backed context summarization for summary chunks and conversation snapshots.
 - Documentation for architecture, provider setup, model manifests, context integration, cancellation, and CI.
 - GitHub Actions CI for package tests.
 
@@ -39,6 +40,7 @@ This project is in early development and has not tagged a stable `1.0.0` release
 - Live OpenAI and Anthropic validation requires runtime credentials plus explicit model environment variables.
 - `yLLMKitContext` does not parse PDFs, DOCX, EPUB, OCR, web pages, or native document formats. Apps provide text sources.
 - `yLLMKitContext` preserves app-owned source-of-truth data; model output should be treated as a proposal before app data is mutated.
+- `ProviderContextSummarizer` creates derived artifacts but does not persist them automatically.
 
 ## Release Notes Policy
 
